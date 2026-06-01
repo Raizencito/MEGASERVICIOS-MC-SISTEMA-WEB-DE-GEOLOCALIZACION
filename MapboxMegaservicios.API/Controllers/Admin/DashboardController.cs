@@ -1,4 +1,4 @@
-﻿using MapboxMegaservicios.API.Data;
+using MapboxMegaservicios.API.Data;
 using MapboxMegaservicios.API.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -28,22 +28,27 @@ namespace MapboxMegaservicios.API.Controllers.Admin
                 var totalEmpleados = await _context.Empleados.CountAsync(e => e.Activo);
                 var totalLugares = await _context.LugaresTrabajo.CountAsync(l => l.Activo);
 
-                var hoy = DateTime.Today;
+                var inicioHoy = DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc);
+                var finHoy = inicioHoy.AddDays(1);
+                
                 var alertasHoy = await _context.AlertasGeocerca
-                    .CountAsync(a => a.FechaHora.Date == hoy);
+                    .CountAsync(a => a.FechaHora >= inicioHoy && a.FechaHora < finHoy);
 
                 // Obtener última ubicación de cada empleado (últimas 24 horas)
-                var ubicaciones = await _context.Ubicaciones
-                    .Where(u => u.FechaHora > DateTime.UtcNow.AddHours(-24))
-                    .GroupBy(u => u.EmpleadoId)
-                    .Select(g => g.OrderByDescending(u => u.FechaHora).First())
+                var ubicaciones = await _context.Empleados
+                    .Where(e => e.Activo)
+                    .Select(e => _context.Ubicaciones
+                        .Where(u => u.EmpleadoId == e.Id && u.FechaHora > DateTime.UtcNow.AddHours(-24))
+                        .OrderByDescending(u => u.FechaHora)
+                        .FirstOrDefault())
+                    .Where(u => u != null)
                     .ToListAsync();
 
                 var enGeocerca = ubicaciones.Count(u => u.EstaEnGeocerca == true);
                 var fueraGeocerca = ubicaciones.Count(u => u.EstaEnGeocerca == false);
 
                 var ultimasAlertas = await _context.AlertasGeocerca
-                    .Where(a => a.FechaHora.Date == hoy)
+                    .Where(a => a.FechaHora >= inicioHoy && a.FechaHora < finHoy)
                     .Include(a => a.Empleado)
                     .Include(a => a.EstadoAlerta)
                     .OrderByDescending(a => a.FechaHora)
@@ -86,22 +91,28 @@ namespace MapboxMegaservicios.API.Controllers.Admin
         {
             try
             {
-                var ubicaciones = await _context.Ubicaciones
-                    .Where(u => u.FechaHora > DateTime.UtcNow.AddHours(-24))
-                    .GroupBy(u => u.EmpleadoId)
-                    .Select(g => g.OrderByDescending(u => u.FechaHora).First())
-                    .Include(u => u.Empleado)
-                        .ThenInclude(e => e.LugarTrabajoActual)
-                    .Select(u => new UbicacionDTO
+                var ubicaciones = await _context.Empleados
+                    .Where(e => e.Activo)
+                    .Select(e => new 
                     {
-                        EmpleadoId = u.EmpleadoId,
-                        EmpleadoNombre = $"{u.Empleado.Nombres} {u.Empleado.Paterno}",
-                        Latitud = u.UbicacionEmp.Y,
-                        Longitud = u.UbicacionEmp.X,
-                        FechaHora = u.FechaHora,
-                        EstaEnGeocerca = u.EstaEnGeocerca,
-                        Estado = u.EstaEnGeocerca == true ? "Dentro de geocerca" : "Fuera de geocerca",
-                        LugarTrabajo = u.Empleado.LugarTrabajoActual != null ? u.Empleado.LugarTrabajoActual.Nombre : "Sin asignar"
+                        Empleado = e,
+                        Lugar = e.LugarTrabajoActual,
+                        UltimaUbicacion = _context.Ubicaciones
+                            .Where(u => u.EmpleadoId == e.Id && u.FechaHora > DateTime.UtcNow.AddHours(-24))
+                            .OrderByDescending(u => u.FechaHora)
+                            .FirstOrDefault()
+                    })
+                    .Where(x => x.UltimaUbicacion != null)
+                    .Select(x => new UbicacionDTO
+                    {
+                        EmpleadoId = x.Empleado.Id,
+                        EmpleadoNombre = x.Empleado.Nombres + " " + x.Empleado.Paterno,
+                        Latitud = x.UltimaUbicacion!.UbicacionEmp.Y,
+                        Longitud = x.UltimaUbicacion!.UbicacionEmp.X,
+                        FechaHora = x.UltimaUbicacion.FechaHora,
+                        EstaEnGeocerca = x.UltimaUbicacion.EstaEnGeocerca,
+                        Estado = x.UltimaUbicacion.EstaEnGeocerca == true ? "Dentro de geocerca" : "Fuera de geocerca",
+                        LugarTrabajo = x.Lugar != null ? x.Lugar.Nombre : "Sin asignar"
                     })
                     .ToListAsync();
 
@@ -141,9 +152,10 @@ namespace MapboxMegaservicios.API.Controllers.Admin
         {
             try
             {
-                var hoy = DateTime.Today;
+                var inicioHoy = DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc);
+                var finHoy = inicioHoy.AddDays(1);
                 var alertasPorHora = await _context.AlertasGeocerca
-                    .Where(a => a.FechaHora.Date == hoy)
+                    .Where(a => a.FechaHora >= inicioHoy && a.FechaHora < finHoy)
                     .GroupBy(a => a.FechaHora.Hour)
                     .Select(g => new { Hora = g.Key, Cantidad = g.Count() })
                     .OrderBy(x => x.Hora)

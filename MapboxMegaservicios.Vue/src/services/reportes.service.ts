@@ -23,58 +23,54 @@ export interface DatosReporte {
 }
 
 class ReportesService {
-  async generarReportePDF(filtro: FiltroReporte): Promise<Blob> {
-    const response = await api.post('/reportes/generar-pdf', filtro, {
-      responseType: 'blob',
-    })
+  async obtenerAlertas(filtro: FiltroReporte): Promise<any> {
+    const params = new URLSearchParams()
+    if (filtro.desde) params.append('desde', filtro.desde)
+    if (filtro.hasta) params.append('hasta', filtro.hasta)
+    if (filtro.empleadoId) params.append('empleadoId', filtro.empleadoId.toString())
+    if (filtro.departamentoId) params.append('departamentoId', filtro.departamentoId.toString())
+    if (filtro.lugarTrabajoId) params.append('lugarTrabajoId', filtro.lugarTrabajoId.toString())
+
+    const response = await api.get(`/admin/reportes/alertas?${params.toString()}`)
     return response.data
   }
 
-  async generarReporteExcel(filtro: FiltroReporte): Promise<Blob> {
-    const response = await api.post('/reportes/generar-excel', filtro, {
-      responseType: 'blob',
-    })
+  async obtenerTiemposFuera(filtro: FiltroReporte): Promise<any> {
+    const params = new URLSearchParams()
+    if (filtro.desde) params.append('desde', filtro.desde)
+    if (filtro.hasta) params.append('hasta', filtro.hasta)
+    if (filtro.empleadoId) params.append('empleadoId', filtro.empleadoId.toString())
+    if (filtro.departamentoId) params.append('departamentoId', filtro.departamentoId.toString())
+    if (filtro.lugarTrabajoId) params.append('lugarTrabajoId', filtro.lugarTrabajoId.toString())
+
+    const response = await api.get(`/admin/reportes/tiempos-fuera?${params.toString()}`)
     return response.data
   }
 
-  async obtenerDatosReporte(filtro: FiltroReporte): Promise<DatosReporte> {
-    const response = await api.post('/reportes/datos-reporte', filtro)
+  async obtenerAsistencia(filtro: FiltroReporte): Promise<any> {
+    const params = new URLSearchParams()
+    if (filtro.desde) params.append('desde', filtro.desde)
+    if (filtro.hasta) params.append('hasta', filtro.hasta)
+    if (filtro.departamentoId) params.append('departamentoId', filtro.departamentoId.toString())
+    if (filtro.lugarTrabajoId) params.append('lugarTrabajoId', filtro.lugarTrabajoId.toString())
+
+    const response = await api.get(`/admin/reportes/asistencia?${params.toString()}`)
     return response.data
   }
 
   async obtenerDepartamentos(): Promise<any[]> {
-    const response = await api.get('/departamentos')
+    const response = await api.get('/admin/lugares/departamentos')
     return response.data
   }
 
   async obtenerLugaresPorDepartamento(departamentoId: number): Promise<any[]> {
-    const response = await api.get(`/lugares/departamento/${departamentoId}`)
-    return response.data
+    const response = await api.get(`/admin/lugares`)
+    return response.data.filter((l: any) => l.departamentoId === departamentoId)
   }
 
   async obtenerEmpleadosActivos(): Promise<any[]> {
-    const response = await api.get('/empleados/activos')
-    return response.data
-  }
-
-  // Método para descargar reporte con nombre automático
-  async descargarReportePDF(filtro: FiltroReporte, nombreBase: string = 'reporte') {
-    const blob = await this.generarReportePDF(filtro)
-    const fecha = new Date().toISOString().split('T')[0]
-    const nombreArchivo = `${nombreBase}-${fecha}.pdf`
-
-    this.descargarArchivo(blob, nombreArchivo)
-  }
-
-  private descargarArchivo(blob: Blob, nombreArchivo: string) {
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = nombreArchivo
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    window.URL.revokeObjectURL(url)
+    const response = await api.get('/admin/empleados')
+    return response.data.filter((e: any) => e.activo)
   }
 }
 

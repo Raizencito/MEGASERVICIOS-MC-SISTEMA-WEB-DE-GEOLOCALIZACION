@@ -1,4 +1,4 @@
-﻿using MapboxMegaservicios.API.Data;
+using MapboxMegaservicios.API.Data;
 using MapboxMegaservicios.API.DTOs;
 using MapboxMegaservicios.API.Models;
 using Microsoft.AspNetCore.Authorization;
@@ -94,22 +94,28 @@ namespace MapboxMegaservicios.API.Controllers
             try
             {
                 // Obtener la última ubicación de cada empleado activo
-                var ubicaciones = await _context.Ubicaciones
-                    .Where(u => u.FechaHora > DateTime.UtcNow.AddHours(-24)) // Últimas 24 horas
-                    .GroupBy(u => u.EmpleadoId)
-                    .Select(g => g.OrderByDescending(u => u.FechaHora).First())
-                    .Include(u => u.Empleado)
-                        .ThenInclude(e => e.LugarTrabajoActual)
-                    .Select(u => new UbicacionDTO
+                var ubicaciones = await _context.Empleados
+                    .Where(e => e.Activo)
+                    .Select(e => new 
                     {
-                        EmpleadoId = u.EmpleadoId,
-                        EmpleadoNombre = $"{u.Empleado.Nombres} {u.Empleado.Paterno}",
-                        Latitud = u.UbicacionEmp.Y,
-                        Longitud = u.UbicacionEmp.X,
-                        FechaHora = u.FechaHora,
-                        EstaEnGeocerca = u.EstaEnGeocerca,
-                        Estado = u.EstaEnGeocerca == true ? "Dentro de geocerca" : "Fuera de geocerca",
-                        LugarTrabajo = u.Empleado.LugarTrabajoActual != null ? u.Empleado.LugarTrabajoActual.Nombre : "Sin asignar"
+                        Empleado = e,
+                        Lugar = e.LugarTrabajoActual,
+                        UltimaUbicacion = _context.Ubicaciones
+                            .Where(u => u.EmpleadoId == e.Id && u.FechaHora > DateTime.UtcNow.AddHours(-24))
+                            .OrderByDescending(u => u.FechaHora)
+                            .FirstOrDefault()
+                    })
+                    .Where(x => x.UltimaUbicacion != null)
+                    .Select(x => new UbicacionDTO
+                    {
+                        EmpleadoId = x.Empleado.Id,
+                        EmpleadoNombre = x.Empleado.Nombres + " " + x.Empleado.Paterno,
+                        Latitud = x.UltimaUbicacion!.UbicacionEmp.Y,
+                        Longitud = x.UltimaUbicacion!.UbicacionEmp.X,
+                        FechaHora = x.UltimaUbicacion.FechaHora,
+                        EstaEnGeocerca = x.UltimaUbicacion.EstaEnGeocerca,
+                        Estado = x.UltimaUbicacion.EstaEnGeocerca == true ? "Dentro de geocerca" : "Fuera de geocerca",
+                        LugarTrabajo = x.Lugar != null ? x.Lugar.Nombre : "Sin asignar"
                     })
                     .ToListAsync();
 

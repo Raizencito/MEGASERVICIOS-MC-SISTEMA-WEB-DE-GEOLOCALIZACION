@@ -1,4 +1,4 @@
-﻿using MapboxMegaservicios.API.Data;
+using MapboxMegaservicios.API.Data;
 using MapboxMegaservicios.API.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -24,7 +24,9 @@ namespace MapboxMegaservicios.API.Controllers.Admin
         public async Task<ActionResult<ReporteAlertasDTO>> GenerarReporteAlertas(
             [FromQuery] DateTime desde,
             [FromQuery] DateTime hasta,
-            [FromQuery] int? empleadoId = null)
+            [FromQuery] int? empleadoId = null,
+            [FromQuery] int? departamentoId = null,
+            [FromQuery] int? lugarTrabajoId = null)
         {
             try
             {
@@ -35,8 +37,11 @@ namespace MapboxMegaservicios.API.Controllers.Admin
                 if ((hasta - desde).TotalDays > 31)
                     return BadRequest(new { message = "El período máximo es de 31 días" });
 
+                var utcDesde = DateTime.SpecifyKind(desde.Date, DateTimeKind.Utc);
+                var utcHasta = DateTime.SpecifyKind(hasta.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc);
+
                 var query = _context.AlertasGeocerca
-                    .Where(a => a.FechaHora >= desde && a.FechaHora <= hasta)
+                    .Where(a => a.FechaHora >= utcDesde && a.FechaHora <= utcHasta)
                     .Include(a => a.Empleado)
                     .Include(a => a.EstadoAlerta)
                     .AsQueryable();
@@ -44,6 +49,15 @@ namespace MapboxMegaservicios.API.Controllers.Admin
                 if (empleadoId.HasValue)
                 {
                     query = query.Where(a => a.EmpleadoId == empleadoId.Value);
+                }
+
+                if (lugarTrabajoId.HasValue)
+                {
+                    query = query.Where(a => a.Empleado.LugarTrabajoActualId == lugarTrabajoId.Value);
+                }
+                else if (departamentoId.HasValue)
+                {
+                    query = query.Where(a => a.Empleado.LugarTrabajoActual != null && a.Empleado.LugarTrabajoActual.DepartamentoId == departamentoId.Value);
                 }
 
                 var alertas = await query
@@ -85,16 +99,19 @@ namespace MapboxMegaservicios.API.Controllers.Admin
         }
 
         [HttpGet("asistencia")]
-        public async Task<ActionResult<ReporteAsistenciaDTO>> GenerarReporteAsistencia([FromQuery] DateTime fecha)
+        public async Task<ActionResult<ReporteAsistenciaDTO>> GenerarReporteAsistencia([FromQuery] DateTime desde, [FromQuery] DateTime hasta)
         {
             try
             {
-                var desde = fecha.Date;
-                var hasta = fecha.Date.AddDays(1).AddSeconds(-1);
+                if (desde > hasta) return BadRequest(new { message = "La fecha 'desde' no puede ser mayor a 'hasta'" });
+                if ((hasta - desde).TotalDays > 31) return BadRequest(new { message = "El período máximo es de 31 días" });
+
+                var utcDesde = DateTime.SpecifyKind(desde.Date, DateTimeKind.Utc);
+                var utcHasta = DateTime.SpecifyKind(hasta.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc);
 
                 // Obtener última ubicación de cada empleado en ese día
                 var ubicaciones = await _context.Ubicaciones
-                    .Where(u => u.FechaHora >= desde && u.FechaHora <= hasta)
+                    .Where(u => u.FechaHora >= utcDesde && u.FechaHora <= utcHasta)
                     .GroupBy(u => u.EmpleadoId)
                     .Select(g => g.OrderByDescending(u => u.FechaHora).First())
                     .Include(u => u.Empleado)
@@ -114,7 +131,7 @@ namespace MapboxMegaservicios.API.Controllers.Admin
 
                 // Obtener alertas del día
                 var alertas = await _context.AlertasGeocerca
-                    .Where(a => a.FechaHora >= desde && a.FechaHora <= hasta)
+                    .Where(a => a.FechaHora >= utcDesde && a.FechaHora <= utcHasta)
                     .Include(a => a.Empleado)
                     .Include(a => a.EstadoAlerta)
                     .Select(a => new
@@ -127,7 +144,7 @@ namespace MapboxMegaservicios.API.Controllers.Admin
 
                 var reporte = new ReporteAsistenciaDTO
                 {
-                    Fecha = fecha,
+                    Fecha = desde, // O un rango si se prefiere
                     TotalEmpleados = await _context.Empleados.CountAsync(e => e.Activo),
                     EmpleadosEnGeocerca = ubicaciones.Count(u => u.EstaEnGeocerca == true),
                     EmpleadosFueraGeocerca = ubicaciones.Count(u => u.EstaEnGeocerca == false),
@@ -143,14 +160,14 @@ namespace MapboxMegaservicios.API.Controllers.Admin
                     }).ToList()
                 };
 
-                _logger.LogInformation("📄 Reporte de asistencia generado para {Fecha}: {EnGeocerca} dentro, {FueraGeocerca} fuera",
-                    fecha.ToString("yyyy-MM-dd"), reporte.EmpleadosEnGeocerca, reporte.EmpleadosFueraGeocerca);
+                _logger.LogInformation("📄 Reporte de asistencia generado para {Desde} a {Hasta}: {EnGeocerca} dentro, {FueraGeocerca} fuera",
+                    utcDesde.ToString("yyyy-MM-dd"), utcHasta.ToString("yyyy-MM-dd"), reporte.EmpleadosEnGeocerca, reporte.EmpleadosFueraGeocerca);
 
                 return Ok(reporte);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error generando reporte de asistencia para fecha {Fecha}", fecha);
+                _logger.LogError(ex, "Error generando reporte de asistencia");
                 return StatusCode(500, new { message = "Error interno del servidor" });
             }
         }
@@ -159,15 +176,20 @@ namespace MapboxMegaservicios.API.Controllers.Admin
         public async Task<ActionResult<ReporteTiemposFueraDTO>> GenerarReporteTiemposFuera(
             [FromQuery] DateTime desde,
             [FromQuery] DateTime hasta,
-            [FromQuery] int? empleadoId = null)
+            [FromQuery] int? empleadoId = null,
+            [FromQuery] int? departamentoId = null,
+            [FromQuery] int? lugarTrabajoId = null)
         {
             try
             {
                 if (desde > hasta)
                     return BadRequest(new { message = "La fecha 'desde' no puede ser mayor a 'hasta'" });
 
+                var utcDesde = DateTime.SpecifyKind(desde.Date, DateTimeKind.Utc);
+                var utcHasta = DateTime.SpecifyKind(hasta.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc);
+
                 var query = _context.Ubicaciones
-                    .Where(u => u.FechaHora >= desde && u.FechaHora <= hasta)
+                    .Where(u => u.FechaHora >= utcDesde && u.FechaHora <= utcHasta)
                     .Include(u => u.Empleado)
                     .OrderBy(u => u.EmpleadoId)
                     .ThenBy(u => u.FechaHora)
@@ -176,6 +198,15 @@ namespace MapboxMegaservicios.API.Controllers.Admin
                 if (empleadoId.HasValue)
                 {
                     query = query.Where(u => u.EmpleadoId == empleadoId.Value);
+                }
+                
+                if (lugarTrabajoId.HasValue)
+                {
+                    query = query.Where(u => u.Empleado.LugarTrabajoActualId == lugarTrabajoId.Value);
+                }
+                else if (departamentoId.HasValue)
+                {
+                    query = query.Where(u => u.Empleado.LugarTrabajoActual != null && u.Empleado.LugarTrabajoActual.DepartamentoId == departamentoId.Value);
                 }
 
                 var ubicaciones = await query.ToListAsync();

@@ -33,8 +33,10 @@ async function generarReporte() {
   try {
     if (tipoReporte.value === 'descuentos') {
       await generarPDFDescuentos()
+    } else if (tipoReporte.value === 'individual') {
+      await generarPDFIndividual()
     } else {
-      await generarPDFServidor()
+      await generarPDFGeneral()
     }
   } catch (e) {
     console.error(e)
@@ -44,36 +46,122 @@ async function generarReporte() {
   }
 }
 
-// 1. PDF SERVIDOR (General / Individual - Asistencia Standard)
-async function generarPDFServidor() {
-  // Ajustar filtros según tipo
-  const filtroEnvio = { ...filtros.value }
+// 1. PDF General (Todos los empleados)
+async function generarPDFGeneral() {
+  const f = { ...filtros.value, empleadoId: undefined }
+  const datosAlertas = await reportesService.obtenerAlertas(f)
+  const datosTiempos = await reportesService.obtenerTiemposFuera(f)
   
-  if (tipoReporte.value === 'general') {
-     filtroEnvio.empleadoId = undefined // Ignorar empleado si es general
-  }
-
-  const blob = await reportesService.generarReportePDF({
-      ...filtroEnvio,
-      tipo: 'asistencia' // Backend siempre usa este por ahora
+  const doc = new jsPDF()
+  
+  doc.setFontSize(18)
+  doc.setTextColor(33, 150, 243)
+  doc.text('REPORTE GENERAL DE ASISTENCIA Y ALERTAS', 14, 20)
+  
+  doc.setFontSize(10)
+  doc.setTextColor(100)
+  doc.text(`Período: ${filtros.value.desde} al ${filtros.value.hasta}`, 14, 28)
+  doc.text(`Total Alertas: ${datosAlertas.totalAlertas || 0}`, 14, 33)
+  
+  // Tabla de Tiempos Fuera
+  doc.setFontSize(14)
+  doc.setTextColor(0)
+  doc.text('Tiempo fuera de geocerca por empleado', 14, 45)
+  
+  const rowsTiempos = Object.entries(datosTiempos.tiemposPorEmpleado || {}).map(([emp, tiempo]: any) => {
+    return [emp, tiempo]
   })
   
-  descargarBlob(blob, `Reporte-${tipoReporte.value}-${filtros.value.desde}`)
+  autoTable(doc, {
+    startY: 50,
+    head: [['Empleado', 'Tiempo Fuera (HH:MM:SS)']],
+    body: rowsTiempos,
+    theme: 'grid',
+    headStyles: { fillColor: [33, 150, 243] },
+  })
+  
+  // Tabla de Alertas
+  const currentY = (doc as any).lastAutoTable.finalY + 15
+  doc.setFontSize(14)
+  doc.text('Últimas Alertas', 14, currentY)
+  
+  const rowsAlertas = (datosAlertas.alertas || []).map((a: any) => [
+    a.empleadoNombre,
+    new Date(a.fechaHora).toLocaleString(),
+    a.tipoAlerta,
+    a.observaciones
+  ])
+  
+  autoTable(doc, {
+    startY: currentY + 5,
+    head: [['Empleado', 'Fecha/Hora', 'Tipo', 'Observaciones']],
+    body: rowsAlertas,
+    theme: 'grid',
+    headStyles: { fillColor: [244, 67, 54] },
+  })
+
+  doc.save(`Reporte-General-${filtros.value.desde}.pdf`)
 }
 
-// 2. PDF CLIENTE (Descuentos - Lógica Custom)
-async function generarPDFDescuentos() {
-  // Obtener datos crudos
-  const datos = await reportesService.obtenerDatosReporte({
-      ...filtros.value
+// 2. PDF Individual
+async function generarPDFIndividual() {
+  if (!filtros.value.empleadoId) {
+    alert("Debe seleccionar un empleado para este reporte.")
+    return
+  }
+
+  const f = { ...filtros.value, departamentoId: undefined, lugarTrabajoId: undefined }
+  const datosAlertas = await reportesService.obtenerAlertas(f)
+  const datosTiempos = await reportesService.obtenerTiemposFuera(f)
+  
+  const empleadoInfo = empleados.value.find(e => e.id === filtros.value.empleadoId)
+  
+  const doc = new jsPDF()
+  
+  doc.setFontSize(18)
+  doc.setTextColor(76, 175, 80) // Verde
+  doc.text('REPORTE INDIVIDUAL DEL EMPLEADO', 14, 20)
+  
+  doc.setFontSize(12)
+  doc.setTextColor(0)
+  doc.text(`Empleado: ${empleadoInfo?.nombreCompleto || 'Desconocido'}`, 14, 30)
+  
+  doc.setFontSize(10)
+  doc.setTextColor(100)
+  doc.text(`Período: ${filtros.value.desde} al ${filtros.value.hasta}`, 14, 36)
+  
+  const tiempoFuera = Object.values(datosTiempos.tiemposPorEmpleado || {})[0] || '00:00:00'
+  doc.text(`Total tiempo fuera de geocerca: ${tiempoFuera}`, 14, 42)
+  doc.text(`Total alertas registradas: ${datosAlertas.totalAlertas || 0}`, 14, 48)
+
+  const rowsAlertas = (datosAlertas.alertas || []).map((a: any) => [
+    new Date(a.fechaHora).toLocaleString(),
+    a.tipoAlerta,
+    a.observaciones
+  ])
+
+  autoTable(doc, {
+    startY: 55,
+    head: [['Fecha/Hora', 'Tipo de Alerta', 'Observaciones']],
+    body: rowsAlertas,
+    theme: 'striped',
+    headStyles: { fillColor: [76, 175, 80] },
   })
+
+  doc.save(`Reporte-Individual-${filtros.value.desde}.pdf`)
+}
+
+// 3. PDF CLIENTE (Descuentos)
+async function generarPDFDescuentos() {
+  // Para descuentos, evaluaremos el "tiempo fuera" como falta
+  const datosTiempos = await reportesService.obtenerTiemposFuera({ ...filtros.value })
 
   const doc = new jsPDF()
   
   // Header
   doc.setFontSize(18)
   doc.setTextColor(192, 57, 43) // Rojo Oscuro
-  doc.text('REPORTE DE DESCUENTOS Y FALTAS', 14, 20)
+  doc.text('REPORTE DE DESCUENTOS POR TIEMPO FUERA', 14, 20)
   
   doc.setFontSize(10)
   doc.setTextColor(100)
@@ -81,32 +169,31 @@ async function generarPDFDescuentos() {
   doc.text(`Generado: ${new Date().toLocaleString()}`, 14, 33)
 
   // LOGICA DE CALCULO
-  // Filtramos jornadas con menos de 8 horas o faltas
-  const jornadasDescuento = datos.jornadas.filter((j: any) => {
-     return (j.totalHoras || 0) < 8
-  })
-
-  const rows = jornadasDescuento.map((j: any) => {
-      const horasTrabajadas = j.totalHoras || 0
-      const horasDebe = 8 - horasTrabajadas
-      const penalizacion = horasDebe * 10 // Ejemplo: 10 Bs por hora (o unidad arbitraria)
+  // Por cada hora fuera de la geocerca, se descuenta 15 Bs (por ejemplo)
+  const rows = Object.entries(datosTiempos.tiemposPorEmpleado || {}).map(([emp, tiempo]: any) => {
+      // Parsear "HH:MM:SS" a horas decimales
+      const partes = tiempo.split(':')
+      const horasDebe = parseInt(partes[0]) + (parseInt(partes[1]) / 60) + (parseInt(partes[2]) / 3600)
       
+      const penalizacion = horasDebe * 15 // 15 Bs por hora fuera
+      
+      // Solo mostrar si hay tiempo fuera
+      if (horasDebe <= 0) return null
+
       return [
-         `${j.empleado?.nombres} ${j.empleado?.paterno}`,
-         new Date(j.fecha).toLocaleDateString(),
-         horasTrabajadas.toFixed(2) + ' hrs',
-         horasDebe.toFixed(2) + ' hrs',
+         emp,
+         tiempo,
          `-${penalizacion.toFixed(2)} Bs`
       ]
-  })
+  }).filter(Boolean)
 
   if (rows.length === 0) {
-      doc.text("¡Felicidades! No hay descuentos aplicables en este período.", 14, 50)
+      doc.text("¡Felicidades! Todos cumplieron su tiempo en geocerca sin faltas.", 14, 50)
   } else {
       autoTable(doc, {
           startY: 40,
-          head: [['Empleado', 'Fecha', 'Trabajado', 'Debe', 'Desc. Est.']],
-          body: rows,
+          head: [['Empleado', 'Tiempo Total Fuera', 'Descuento Estimado']],
+          body: rows as any[],
           theme: 'grid',
           headStyles: { fillColor: [192, 57, 43] },
       })
@@ -126,22 +213,31 @@ function descargarBlob(blob: Blob, nombre: string) {
 
 // Carga de Datos
 async function cargarCatalogos() {
-   // Deptos
-   const dObj = await api.get('/departamentos') // Asumiendo endpoint existe o simulamos
-   if (dObj.data) departamentos.value = dObj.data
-   else {
-      // Fallback estatico si no existe endpoint
-      departamentos.value = [
-          {id: 1, nombre: 'La Paz'}, {id: 2, nombre: 'Cochabamba'}, {id: 3, nombre: 'Santa Cruz'}
-      ]
+   try {
+     // Departamentos
+     const dObj = await reportesService.obtenerDepartamentos()
+     if (dObj && dObj.length > 0) {
+        departamentos.value = dObj
+     }
+   } catch (error) {
+     // Fallback estático si falla el endpoint de admin
+     departamentos.value = [
+         {id: 1, nombre: 'La Paz'}, {id: 2, nombre: 'Cochabamba'}, {id: 3, nombre: 'Santa Cruz'},
+         {id: 4, nombre: 'Oruro'}, {id: 5, nombre: 'Potosí'}, {id: 6, nombre: 'Chuquisaca'},
+         {id: 7, nombre: 'Tarija'}, {id: 8, nombre: 'Beni'}, {id: 9, nombre: 'Pando'}
+     ]
    }
 
-   // Empleados
-   const eObj = await api.get('/empleados/activos')
-   empleados.value = eObj.data.map((e: any) => ({
-       id: e.id,
-       nombreCompleto: `${e.nombres} ${e.paterno} - ${e.ci}`
-   }))
+   try {
+     // Empleados
+     const eObj = await reportesService.obtenerEmpleadosActivos()
+     empleados.value = eObj.map((e: any) => ({
+         id: e.id,
+         nombreCompleto: `${e.nombres} ${e.paterno} - ${e.ci}`
+     }))
+   } catch (error) {
+     console.error("Error cargando empleados activos", error)
+   }
 }
 
 async function cargarLugares() {
@@ -149,8 +245,13 @@ async function cargarLugares() {
        lugares.value = []
        return
    }
-   const lObj = await api.get(`/lugares/departamento/${filtros.value.departamentoId}`)
-   lugares.value = lObj.data
+   try {
+     const lugaresData = await reportesService.obtenerLugaresPorDepartamento(filtros.value.departamentoId)
+     lugares.value = lugaresData
+   } catch (error) {
+     console.error("Error cargando lugares", error)
+     lugares.value = []
+   }
 }
 
 // WATCHERS

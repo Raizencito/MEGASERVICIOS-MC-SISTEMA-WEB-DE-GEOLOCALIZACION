@@ -94,7 +94,7 @@ const formatDate = (date: string | Date) => {
 onMounted(async () => {
   loading.value = true
   try {
-    const response = await api.get('/ubicaciones/dashboard')
+    const response = await api.get('/admin/dashboard/estadisticas')
     const data = response.data
 
     // Usar valores por defecto si no existen (Soporte dual Camel/Pascal para robustez)

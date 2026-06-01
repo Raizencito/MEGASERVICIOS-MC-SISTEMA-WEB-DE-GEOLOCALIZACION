@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 using MapboxMegaservicios.API.Data;
 using MapboxMegaservicios.API.DTOs;
@@ -288,10 +288,13 @@ namespace MapboxMegaservicios.API.Controllers.Admin
                 // Si request.Telefono es null o vacío, NO cambiamos empleado.Telefono
 
                 // Actualizar otros campos
-                empleado.Paterno = request.Paterno.Trim();
+                empleado.Paterno = request.Paterno?.Trim() ?? "";
                 empleado.Materno = request.Materno?.Trim() ?? "";
-                empleado.Nombres = request.Nombres.Trim();
-                empleado.IdRol = request.IdRol;
+                empleado.Nombres = request.Nombres?.Trim() ?? "";
+                if (request.IdRol.HasValue && request.IdRol.Value > 0)
+                {
+                    empleado.IdRol = request.IdRol.Value;
+                }
                 empleado.Activo = request.Activo;
 
                 await _context.SaveChangesAsync();
@@ -364,8 +367,8 @@ namespace MapboxMegaservicios.API.Controllers.Admin
                 // 4. Actualizar empleado con ExecuteSqlRaw
                 await _context.Database.ExecuteSqlRawAsync(
                     request.LugarTrabajoId.HasValue
-                        ? @"UPDATE ""Empleados"" SET ""IdLugarTrabajoActual"" = {0} WHERE ""Id"" = {1}"
-                        : @"UPDATE ""Empleados"" SET ""IdLugarTrabajoActual"" = NULL WHERE ""Id"" = {1}",
+                        ? @"UPDATE ""Empleados"" SET ""LugarTrabajoActualId"" = {0} WHERE ""Id"" = {1}"
+                        : @"UPDATE ""Empleados"" SET ""LugarTrabajoActualId"" = NULL WHERE ""Id"" = {1}",
                     request.LugarTrabajoId.HasValue ? request.LugarTrabajoId.Value : 0,
                     id);
 
@@ -636,7 +639,7 @@ namespace MapboxMegaservicios.API.Controllers.Admin
         public string Nombres { get; set; } = string.Empty;
         
         public string? Telefono { get; set; }
-        public int IdRol { get; set; }
+        public int? IdRol { get; set; }
         public bool Activo { get; set; }
     }
 }

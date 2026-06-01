@@ -55,6 +55,7 @@ const emit = defineEmits<{
 }>()
 
 // Referencias
+let marcadoresPines: mapboxgl.Marker[] = []
 const mapContainer = ref<HTMLElement>()
 const map = ref<mapboxgl.Map>()
 const puntos = ref<Array<{ lng: number; lat: number }>>([])
@@ -125,17 +126,14 @@ watch(modo, (nuevoModo) => {
   if (nuevoModo === 'dibujo') {
     editandoGeocerca.value = true
     if (map.value) map.value.getCanvas().style.cursor = 'crosshair'
-  } else if (nuevoModo === 'simular') {
+  } else if (modo.value === 'simular') {
     editandoGeocerca.value = false
     if (map.value) map.value.getCanvas().style.cursor = 'crosshair' // También crosshair para apuntar
   } else {
-    // Si salimos de modo dibujo, dejamos de editar solo si no hay puntos
-    if (puntos.value.length === 0) {
-      editandoGeocerca.value = false
-    }
+    editandoGeocerca.value = false
     if (map.value) map.value.getCanvas().style.cursor = ''
   }
-})
+}, { immediate: true })
 
 // Watch para empleado simulado: poner marcador arrastrable
 watch(empleadoSimuladoId, (newId) => {
@@ -241,6 +239,18 @@ onMounted(() => {
       puntos.value = props.coordenadasIniciales
       dibujarGeocercaEditada()
       editandoGeocerca.value = true
+    }
+  })
+
+  // Eventos de zoom
+  map.value.on('zoom', () => {
+    if (mapaCargado.value) {
+      actualizarCapas()
+    }
+  })
+  map.value.on('zoomend', () => {
+    if (mapaCargado.value) {
+      actualizarCapas()
     }
   })
 
@@ -390,16 +400,9 @@ function dibujarGeocercasExistentes() {
     return
   }
 
-  console.log('🎨 INICIANDO DIBUJO DE GEOCERCAS (Lógica de Debug)...')
-  console.log(`📊 LUGARES DISPONIBLES: ${lugares.value.length}`)
-  
-  // 0. Debug rápido de datos
-  if (lugares.value.length > 0) {
-     console.log('🔍 Muestra Lugar 1:', lugares.value[0].nombre, lugares.value[0].geocercaGeoJSON ? 'TIENE GEOJSON' : 'SIN GEOJSON')
-  }
-
   // 1. Procesar Features
   const features: any[] = []
+  const centroidFeatures: any[] = []
   
   lugares.value.forEach((lugar) => {
     if (!lugar.geocercaGeoJSON) return
@@ -414,8 +417,9 @@ function dibujarGeocercasExistentes() {
       }
 
       if (geometry && geometry.coordinates) {
-        features.push({
+        const feature = {
           type: 'Feature',
+          id: lugar.id,
           properties: {
              id: lugar.id,
              nombre: lugar.nombre,
@@ -424,16 +428,19 @@ function dibujarGeocercasExistentes() {
              departamento: lugar.departamentoId
           },
           geometry: geometry
-        })
+        }
+        features.push(feature)
+
+        // Usar Turf.js para calcular el centroide
+        const center = turf.centroid(feature as any)
+        center.properties = { ...feature.properties }
+        center.id = lugar.id
+        centroidFeatures.push(center)
       }
     } catch (e) {
       console.error(`Error procesando lugar ${lugar.nombre}:`, e)
     }
   })
-
-  console.log(`✅ ${features.length} geocercas procesadas correctamente`)
-
-  if (features.length === 0) return
 
   // 2. Limpiar capas previas
   const sourceId = 'geocercas'
@@ -442,6 +449,10 @@ function dibujarGeocercasExistentes() {
     if (map.value.getLayer('geocercas-border')) map.value.removeLayer('geocercas-border')
     map.value.removeSource(sourceId)
   }
+  
+  // Limpiar pines HTML previos
+  marcadoresPines.forEach(m => m.remove())
+  marcadoresPines = []
 
   // 3. Agregar Source y Layers
   try {
@@ -458,6 +469,9 @@ function dibujarGeocercasExistentes() {
        id: 'geocercas-fill',
        type: 'fill',
        source: sourceId,
+       layout: {
+         'visibility': map.value.getZoom() >= 13 ? 'visible' : 'none'
+       },
        paint: { 
          'fill-color': '#3b82f6', 
          'fill-opacity': 0.3,
@@ -470,11 +484,49 @@ function dibujarGeocercasExistentes() {
        id: 'geocercas-border',
        type: 'line',
        source: sourceId,
+       layout: {
+         'visibility': map.value.getZoom() >= 13 ? 'visible' : 'none'
+       },
        paint: { 
          'line-color': '#1d4ed8', 
          'line-width': 2 
        }
      })
+
+     // Renderizar los pines HTML en lugar de Mapbox circles
+     centroidFeatures.forEach((center) => {
+       const el = document.createElement('div')
+       el.className = 'custom-geocerca-pin'
+       el.innerHTML = `<i class="mdi mdi-map-marker" style="font-size: 38px; color: #dc2626; text-shadow: 1px 2px 4px rgba(0,0,0,0.5); cursor: pointer;"></i>`
+
+       const props = center.properties
+
+       const popup = new mapboxgl.Popup({ closeButton: false, offset: 20, className: 'hover-popup' })
+         .setHTML(`
+           <div class="pa-2">
+             <div class="text-subtitle-1 font-weight-bold mb-1" style="font-family: inherit;">🏢 ${props.nombre}</div>
+             <div class="text-body-2" style="font-family: inherit;"><i class="mdi mdi-account-group mr-1" style="font-size: 16px;"></i> Empleados asignados: <strong>${props.empleados || 0}</strong></div>
+           </div>
+         `)
+
+       const marker = new mapboxgl.Marker({ element: el, anchor: 'bottom' })
+         .setLngLat(center.geometry.coordinates as [number, number])
+         .addTo(map.value!)
+
+       // Eventos del marcador HTML
+       el.addEventListener('mouseenter', () => popup.addTo(map.value!))
+       el.addEventListener('mouseleave', () => popup.remove())
+       el.addEventListener('click', (e) => {
+         e.stopPropagation()
+         if (map.value) {
+           map.value.flyTo({ center: center.geometry.coordinates as [number, number], zoom: 14.5 })
+         }
+       })
+
+       marcadoresPines.push(marker)
+     })
+
+     console.log('✅ Capas de geocercas agregadas correctamente')
      
      console.log('✨ Geocercas dibujadas EXITOSAMENTE')
      
@@ -527,8 +579,6 @@ function setupInteractividad() {
     const feature = e.features[0]
     const nombre = feature.properties?.nombre || 'Geocerca'
     
-    // Guardar referencia al popup para borrarlo luego si queremos, 
-    // pero Mapbox maneja popups independientes. Usamos cierre simple.
     new mapboxgl.Popup({ closeButton: false, className: 'hover-popup' })
       .setLngLat(e.lngLat)
       .setHTML(`<strong>🏢 ${nombre}</strong>`)
@@ -667,7 +717,7 @@ function actualizarMarcadoresEmpleados() {
   if (!mapaCargado.value) return
 
   // Limpiar marcadores existentes
-  const markers = document.querySelectorAll('.empleado-marker')
+  const markers = document.querySelectorAll('.empleado-marker-wrapper')
   markers.forEach((marker) => marker.remove())
 
   // Luego, dibujar los nuevos
@@ -701,6 +751,25 @@ function agregarPunto(e: mapboxgl.MapMouseEvent) {
   emit('puntosCambiados', puntos.value)
 }
 
+// Helper para Turf.js Convex Hull
+function getConvexCoordinates(pts: Array<{ lng: number; lat: number }>): number[][] {
+  if (pts.length < 3) return []
+  try {
+    const points = turf.featureCollection(pts.map(p => turf.point([p.lng, p.lat])))
+    const hull = turf.convex(points)
+    if (hull && hull.geometry.coordinates && hull.geometry.coordinates.length > 0) {
+      return hull.geometry.coordinates[0] as number[][]
+    }
+  } catch (e) {
+    console.warn('Error calculando Turf.js Convex Hull:', e)
+  }
+  // Fallback si falla
+  return [
+    ...pts.map((p) => [p.lng, p.lat]),
+    [pts[0].lng, pts[0].lat],
+  ]
+}
+
 // Dibujar geocerca en edición
 function dibujarGeocercaEditada() {
   if (!map.value || !mapaCargado.value || puntos.value.length < 3) return
@@ -712,11 +781,8 @@ function dibujarGeocercaEditada() {
     map.value.removeSource('geocerca-editada')
   }
 
-  // Crear polígono cerrado
-  const coordenadasPoligono = [
-    ...puntos.value.map((p) => [p.lng, p.lat]),
-    [puntos.value[0].lng, puntos.value[0].lat],
-  ]
+  // Crear polígono cerrado (con Turf.js Convex Hull si es posible)
+  const coordenadasPoligono = getConvexCoordinates(puntos.value)
 
   try {
     // Agregar fuente y capas
@@ -763,24 +829,28 @@ function dibujarGeocercaEditada() {
 function actualizarCapas() {
   if (!map.value || !mapaCargado.value) return
 
+  const isGeocercasVisible = capasVisibles.value.includes('geocercas')
+  const currentZoom = map.value.getZoom()
+  const showPolygons = currentZoom >= 13 && isGeocercasVisible
+
+  const showPins = currentZoom < 13 && isGeocercasVisible
+
   // Mostrar/ocultar geocercas
-  if (capasVisibles.value.includes('geocercas')) {
-    if (map.value.getLayer('geocercas-fill')) {
-      map.value.setLayoutProperty('geocercas-fill', 'visibility', 'visible')
-      map.value.setLayoutProperty('geocercas-border', 'visibility', 'visible')
-    }
-  } else {
-    if (map.value.getLayer('geocercas-fill')) {
-      map.value.setLayoutProperty('geocercas-fill', 'visibility', 'none')
-      map.value.setLayoutProperty('geocercas-border', 'visibility', 'none')
-    }
+  if (map.value.getLayer('geocercas-fill')) {
+    map.value.setLayoutProperty('geocercas-fill', 'visibility', showPolygons ? 'visible' : 'none')
+    map.value.setLayoutProperty('geocercas-border', 'visibility', showPolygons ? 'visible' : 'none')
   }
+  
+  // Mostrar/ocultar pines HTML
+  marcadoresPines.forEach(m => {
+    m.getElement().style.display = showPins ? 'block' : 'none'
+  })
 
   // Mostrar/ocultar empleados
   if (capasVisibles.value.includes('empleados')) {
     dibujarEmpleados()
   } else {
-    const markers = document.querySelectorAll('.empleado-marker')
+    const markers = document.querySelectorAll('.empleado-marker-wrapper')
     markers.forEach((marker) => marker.remove())
   }
 }
@@ -798,11 +868,13 @@ function limpiarMapa() {
     }
 
     // Limpiar puntos de edición
-    const markers = document.querySelectorAll('.mapboxgl-marker:not(.empleado-marker)')
+    const markers = document.querySelectorAll('.mapboxgl-marker:not(.empleado-marker-wrapper):not(.custom-geocerca-pin)')
     markers.forEach((marker) => marker.remove())
   }
 
-  editandoGeocerca.value = false
+  if (modo.value !== 'dibujo') {
+    editandoGeocerca.value = false
+  }
   emit('puntosCambiados', [])
 }
 
@@ -817,10 +889,7 @@ async function guardarGeocerca() {
 
   try {
     // Crear GeoJSON del polígono
-    const coordenadasPoligono = [
-      ...puntos.value.map((p) => [p.lng, p.lat]),
-      [puntos.value[0].lng, puntos.value[0].lat],
-    ]
+    const coordenadasPoligono = getConvexCoordinates(puntos.value)
 
     const geojson: GeoJSON.Feature<GeoJSON.Polygon> = {
       type: 'Feature',
@@ -961,11 +1030,28 @@ function agregarPuntoManual(lng: number, lat: number) {
 
 <style scoped>
 .map-container {
-  width: 100%;
-  height: 500px;
+  border: 1px solid #e0e0e0;
   border-radius: 8px;
   overflow: hidden;
-  border: 2px solid #e0e0e0;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  background-color: #f5f5f5;
+  position: relative;
+  width: 100%;
+  height: 500px;
+}
+
+.custom-geocerca-pin {
+  transition: transform 0.2s;
+}
+
+.custom-geocerca-pin:hover {
+  transform: scale(1.2);
+}
+
+.hover-popup .mapboxgl-popup-content {
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
 
 .legend-color {

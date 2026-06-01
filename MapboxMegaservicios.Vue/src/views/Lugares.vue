@@ -57,10 +57,6 @@
                 <v-icon start size="small">mdi-cursor-move</v-icon>
                 Mover
               </v-btn>
-              <v-btn value="ver" size="small">
-                <v-icon start size="small">mdi-eye</v-icon>
-                Ver
-              </v-btn>
             </v-btn-toggle>
 
             <v-spacer></v-spacer>
@@ -81,10 +77,6 @@
               Limpiar
             </v-btn>
 
-            <v-btn color="success" @click="probarPuntos" variant="tonal" size="small">
-              <v-icon start size="small">mdi-plus</v-icon>
-              Prueba
-            </v-btn>
           </v-toolbar>
 
           <v-card-text>
@@ -423,7 +415,7 @@ const editandoLugar = ref(false)
 const guardandoLugar = ref(false)
 const puntosGeocerca = ref<Array<{ lng: number; lat: number }>>([])
 const coordenadasActuales = ref<Array<{ lng: number; lat: number }>>([])
-const modoMapa = ref('dibujo')
+const modoMapa = ref('mover')
 const departamentoFiltro = ref<number | null>(null)
 const centroDepartamento = ref<{ lng: number; lat: number } | null>(null)
 
@@ -669,21 +661,7 @@ function limpiarMapa() {
   puntosGeocerca.value = []
 }
 
-function probarPuntos() {
-  if (mapaRef.value) {
-    // Agregar puntos de prueba (ejemplo: Plaza Murillo, La Paz)
-    const puntosPrueba = [
-      { lng: -68.1193, lat: -16.4958 },
-      { lng: -68.1185, lat: -16.4958 },
-      { lng: -68.1185, lat: -16.495 },
-      { lng: -68.1193, lat: -16.495 },
-    ]
 
-    puntosPrueba.forEach((punto) => {
-      mapaRef.value?.agregarPuntoManual(punto.lng, punto.lat)
-    })
-  }
-}
 
 async function guardarLugar() {
   if (puntosGeocerca.value.length < 3) {
