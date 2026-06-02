@@ -1,4 +1,4 @@
-﻿namespace MapboxMegaservicios.API.DTOs
+namespace MapboxMegaservicios.API.DTOs
 {
     public class UbicacionDTO
     {
@@ -10,6 +10,7 @@
         public bool? EstaEnGeocerca { get; set; }
         public string Estado { get; set; } = "Desconocido";
         public string LugarTrabajo { get; set; } = string.Empty;
+        public bool IsPossibleSpoofing { get; set; }
     }
 
     public class RegistrarUbicacionRequest

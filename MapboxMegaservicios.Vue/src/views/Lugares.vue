@@ -1,396 +1,208 @@
 <template>
-  <div>
-    <h1 class="mb-6">Lugares de Trabajo</h1>
+  <div class="h-100 d-flex flex-column gap-4">
+    <!-- Header Minimalista -->
+    <v-row align="center" no-gutters class="mb-2">
+      <v-col>
+        <h1 class="text-h4 font-weight-bold" style="color: var(--v-theme-primary); letter-spacing: -1px;">
+          Gestión de Geocercas
+        </h1>
+        <p class="text-subtitle-1 text-medium-emphasis mt-1">
+          Define y administra las ubicaciones de trabajo autorizadas
+        </p>
+      </v-col>
+    </v-row>
 
-    <v-row>
-      <!-- Columna Izquierda: Mapa y Formulario -->
-      <v-col cols="12" lg="8">
-        <!-- Tarjeta del Mapa con controles mejorados -->
-        <v-card class="mb-4">
-          <v-card-title class="d-flex align-center">
-            <v-icon start>mdi-map</v-icon>
-            Mapa de Geocercas
-            <v-spacer></v-spacer>
+    <v-row class="flex-grow-1">
+      <!-- Columna Principal: Mapa -->
+      <v-col cols="12" lg="8" class="d-flex flex-column">
+        <v-card class="flex-grow-1 d-flex flex-column rounded-xl overflow-hidden glass-panel border-0" elevation="12">
+          
+          <!-- Toolbar Flotante sobre el Mapa -->
+          <div class="map-toolbar pa-4 d-flex align-center justify-space-between w-100" style="position: absolute; z-index: 2; top: 0; left: 0; background: linear-gradient(180deg, rgba(15,23,42,0.9) 0%, rgba(15,23,42,0) 100%);">
+            <div class="d-flex align-center gap-4">
+              <v-btn-toggle
+                v-model="modoMapa"
+                color="primary"
+                mandatory
+                variant="flat"
+                class="bg-surface rounded-lg elevation-4"
+              >
+                <v-btn value="dibujo" class="px-4 text-none font-weight-bold">
+                  <v-icon start>mdi-draw-pen</v-icon> Dibujar
+                </v-btn>
+                <v-btn value="mover" class="px-4 text-none font-weight-bold">
+                  <v-icon start>mdi-cursor-move</v-icon> Mover
+                </v-btn>
+              </v-btn-toggle>
 
-            <!-- Filtro por Departamento -->
-            <v-select
-              v-model="departamentoFiltro"
-              :items="departamentos"
-              item-title="nombre"
-              item-value="id"
-              label="Departamento"
-              density="compact"
-              variant="outlined"
-              class="mr-4"
-              style="max-width: 200px"
-              @update:model-value="cambiarDepartamento"
-            >
-              <template v-slot:prepend-inner>
-                <v-icon>mdi-filter</v-icon>
-              </template>
-            </v-select>
-
-            <!-- Estado del lugar -->
-            <v-chip
-              :color="lugarSeleccionado ? 'primary' : 'grey'"
-              variant="outlined"
-              prepend-icon="mdi-map-marker"
-            >
-              {{ lugarSeleccionado ? lugarSeleccionado.nombre : 'Nuevo Lugar' }}
-            </v-chip>
-          </v-card-title>
-
-          <!-- Controles del Mapa en Toolbar (ÚNICO punto de control) -->
-          <v-toolbar density="compact" color="grey-lighten-3" class="px-2">
-            <v-btn-toggle
-              v-model="modoMapa"
-              color="primary"
-              mandatory
-              variant="outlined"
-              density="compact"
-            >
-              <v-btn value="dibujo" size="small">
-                <v-icon start size="small">mdi-pencil</v-icon>
-                Dibujar
-              </v-btn>
-              <v-btn value="mover" size="small">
-                <v-icon start size="small">mdi-cursor-move</v-icon>
-                Mover
-              </v-btn>
-            </v-btn-toggle>
-
-            <v-spacer></v-spacer>
-
-            <v-chip size="small" :color="estadoGeocerca.type" variant="flat" class="mr-2">
-              {{ puntosGeocerca.length }} puntos
-            </v-chip>
-
-            <v-btn
-              color="error"
-              @click="limpiarMapa"
-              :disabled="!hayPuntosEnMapa"
-              variant="tonal"
-              size="small"
-              class="mr-2"
-            >
-              <v-icon start size="small">mdi-delete</v-icon>
-              Limpiar
-            </v-btn>
-
-          </v-toolbar>
-
-          <v-card-text>
-            <!-- ✅ COMPONENTE MAPA HIJO -->
-            <div v-if="mostrarMapa">
-              <MapboxMap
-                ref="mapaRef"
-                :coordenadas-iniciales="coordenadasActuales"
-                :modo="modoMapa"
-                :departamento-centro="centroDepartamento"
-                @geocerca-guardada="onGeocercaGuardada"
-                @puntos-cambiados="onPuntosCambiados"
-              />
+              <v-select
+                v-model="departamentoFiltro"
+                :items="departamentos"
+                item-title="nombre"
+                item-value="id"
+                density="compact"
+                variant="solo-filled"
+                bg-color="surface"
+                hide-details
+                flat
+                class="rounded-lg elevation-4"
+                style="max-width: 200px"
+                @update:model-value="cambiarDepartamento"
+                prepend-inner-icon="mdi-map"
+              ></v-select>
             </div>
-            <div v-else class="text-center pa-8">
-              <v-progress-circular indeterminate color="primary"></v-progress-circular>
-              <p class="mt-4">Cargando mapa...</p>
+
+            <div class="d-flex gap-2">
+              <v-chip
+                v-if="puntosGeocerca.length > 0"
+                :color="estadoGeocerca.type"
+                variant="flat"
+                class="elevation-4 font-weight-bold"
+              >
+                {{ puntosGeocerca.length }} Puntos Registrados
+              </v-chip>
+              <v-btn
+                color="error"
+                variant="flat"
+                @click="limpiarMapa"
+                :disabled="!hayPuntosEnMapa"
+                class="text-none font-weight-bold elevation-4 rounded-lg"
+              >
+                <v-icon start>mdi-eraser</v-icon> Limpiar
+              </v-btn>
             </div>
-          </v-card-text>
-        </v-card>
+          </div>
 
-        <!-- Formulario del Lugar - Ahora siempre visible pero con estado claro -->
-        <v-card
-          :class="{
-            'formulario-edicion': editandoLugar,
-            'formulario-nuevo': !editandoLugar && !lugarSeleccionado,
-          }"
-        >
-          <v-card-title class="d-flex align-center">
-            <v-icon start :color="editandoLugar ? 'warning' : 'primary'">
-              {{ editandoLugar ? 'mdi-pencil' : lugarSeleccionado ? 'mdi-map-marker' : 'mdi-plus' }}
-            </v-icon>
-            {{
-              editandoLugar
-                ? 'Editando Lugar'
-                : lugarSeleccionado
-                  ? 'Lugar Seleccionado'
-                  : 'Nuevo Lugar'
-            }}
-
-            <v-spacer></v-spacer>
-
-            <v-chip
-              v-if="editandoLugar"
-              color="warning"
-              variant="outlined"
-              prepend-icon="mdi-alert"
-            >
-              Modo Edición
-            </v-chip>
-          </v-card-title>
-
-          <v-divider></v-divider>
-
-          <v-card-text>
+          <!-- Contenedor del Mapa -->
+          <div class="flex-grow-1 position-relative" style="min-height: 500px;">
+            <MapboxMap
+              v-if="mostrarMapa"
+              ref="mapaRef"
+              :coordenadas-iniciales="coordenadasActuales"
+              :modo="modoMapa"
+              :departamento-centro="centroDepartamento"
+              @puntos-cambiados="onPuntosCambiados"
+              class="w-100 h-100"
+            />
+            <div v-else class="w-100 h-100 d-flex align-center justify-center bg-surface">
+              <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
+            </div>
+          </div>
+          
+          <!-- Panel Inferior: Formulario Rápido -->
+          <div class="pa-6 bg-surface" style="border-top: 1px solid rgba(255,255,255,0.05);">
             <v-form @submit.prevent="guardarLugar">
-              <v-row>
-                <v-col cols="12" md="6">
+              <v-row align="end">
+                <v-col cols="12" sm="3">
                   <v-text-field
                     v-model="formLugar.nombre"
-                    label="Nombre *"
-                    :rules="[(v) => !!v || 'Nombre es requerido']"
-                    required
-                    variant="outlined"
-                    density="comfortable"
+                    label="Nombre del Lugar *"
+                    variant="underlined"
+                    color="primary"
                     :readonly="lugarSeleccionado && !editandoLugar"
+                    hide-details
                   ></v-text-field>
                 </v-col>
-
-                <v-col cols="12" md="6">
-                  <v-select
+                <v-col cols="12" sm="4">
+                  <v-text-field
+                    v-model="formLugar.direccion"
+                    label="Dirección *"
+                    variant="underlined"
+                    color="primary"
+                    :readonly="lugarSeleccionado && !editandoLugar"
+                    hide-details
+                  ></v-text-field>
+                </v-col>
+                <v-col cols="12" sm="2">
+                   <v-select
                     v-model="formLugar.departamentoId"
                     :items="departamentos"
                     item-title="nombre"
                     item-value="id"
-                    label="Departamento *"
-                    :rules="[(v) => !!v || 'Departamento es requerido']"
-                    required
-                    variant="outlined"
-                    density="comfortable"
+                    label="Depto *"
+                    variant="underlined"
+                    color="primary"
                     :readonly="lugarSeleccionado && !editandoLugar"
+                    hide-details
                   ></v-select>
                 </v-col>
-              </v-row>
-
-              <v-row>
-                <v-col cols="12">
-                  <v-text-field
-                    v-model="formLugar.direccion"
-                    label="Dirección *"
-                    :rules="[(v) => !!v || 'Dirección es requerida']"
-                    required
-                    variant="outlined"
-                    density="comfortable"
-                    :readonly="lugarSeleccionado && !editandoLugar"
-                  ></v-text-field>
+                <v-col cols="12" sm="3" class="d-flex justify-end gap-2">
+                  <template v-if="!editandoLugar && lugarSeleccionado">
+                    <v-btn color="warning" variant="tonal" class="rounded-lg flex-grow-1" @click="habilitarEdicion">
+                      Editar
+                    </v-btn>
+                    <v-btn color="grey" variant="text" icon="mdi-plus" @click="nuevoLugar"></v-btn>
+                  </template>
+                  <template v-else>
+                    <v-btn 
+                      type="submit" 
+                      color="primary" 
+                      variant="flat" 
+                      class="rounded-lg flex-grow-1 text-none font-weight-bold" 
+                      :loading="guardandoLugar" 
+                      :disabled="puntosGeocerca.length < 3"
+                    >
+                      Guardar
+                    </v-btn>
+                    <v-btn v-if="editandoLugar" color="grey" variant="text" icon="mdi-close" @click="cancelarEdicion"></v-btn>
+                  </template>
                 </v-col>
               </v-row>
-
-              <v-row>
-                <v-col cols="12">
-                  <v-textarea
-                    v-model="formLugar.descripcion"
-                    label="Descripción"
-                    rows="2"
-                    hint="Descripción opcional del lugar"
-                    variant="outlined"
-                    density="comfortable"
-                    :readonly="lugarSeleccionado && !editandoLugar"
-                  ></v-textarea>
-                </v-col>
-              </v-row>
-
-              <!-- Estado de la Geocerca con más información -->
-              <v-alert :type="estadoGeocerca.type" variant="tonal" class="mb-4">
-                <div class="d-flex align-center">
-                  <v-icon :color="estadoGeocerca.type" class="mr-3">
-                    {{ estadoGeocerca.icon }}
-                  </v-icon>
-                  <div>
-                    <div class="font-weight-medium">{{ estadoGeocerca.titulo }}</div>
-                    <div class="text-caption">{{ estadoGeocerca.mensaje }}</div>
-                  </div>
-                  <v-spacer></v-spacer>
-                  <v-chip size="small" :color="estadoGeocerca.type" variant="flat">
-                    {{ puntosGeocerca.length }} puntos
-                  </v-chip>
-                </div>
-              </v-alert>
-
-              <!-- Botones de acción -->
-              <div class="d-flex gap-2">
-                <template v-if="!editandoLugar && lugarSeleccionado">
-                  <v-btn
-                    color="warning"
-                    @click="habilitarEdicion"
-                    variant="outlined"
-                    prepend-icon="mdi-pencil"
-                  >
-                    Editar Lugar
-                  </v-btn>
-
-                  <v-btn
-                    color="primary"
-                    @click="guardarSoloGeocerca"
-                    :disabled="puntosGeocerca.length < 3"
-                    variant="tonal"
-                    prepend-icon="mdi-map-marker"
-                  >
-                    Actualizar Geocerca
-                  </v-btn>
-                </template>
-
-                <template v-else>
-                  <v-btn
-                    type="submit"
-                    color="primary"
-                    :loading="guardandoLugar"
-                    :disabled="puntosGeocerca.length < 3"
-                    prepend-icon="mdi-content-save"
-                  >
-                    {{ editandoLugar ? 'Actualizar Lugar' : 'Crear Lugar' }}
-                  </v-btn>
-
-                  <v-btn
-                    v-if="editandoLugar"
-                    @click="cancelarEdicion"
-                    variant="outlined"
-                    color="grey"
-                    prepend-icon="mdi-close"
-                  >
-                    Cancelar
-                  </v-btn>
-                </template>
-
-                <v-spacer></v-spacer>
-
-                <v-btn color="grey" @click="nuevoLugar" variant="text" prepend-icon="mdi-plus">
-                  Nuevo
-                </v-btn>
-              </div>
             </v-form>
-          </v-card-text>
+          </div>
         </v-card>
       </v-col>
 
-      <!-- Columna Derecha: Lista de Lugares -->
-      <v-col cols="12" lg="4">
-        <!-- Lista de Lugares -->
-        <v-card class="mb-4">
-          <v-card-title class="d-flex align-center">
-            <v-icon start>mdi-office-building</v-icon>
-            Lugares Registrados
-            <v-spacer></v-spacer>
-            <v-btn icon @click="cargarLugares" size="small" variant="text">
-              <v-icon>mdi-refresh</v-icon>
-            </v-btn>
+      <!-- Columna Lateral: Directorio -->
+      <v-col cols="12" lg="4" class="d-flex flex-column gap-4">
+        <v-card class="bg-surface rounded-xl flex-grow-1 d-flex flex-column" elevation="0">
+          <v-card-title class="pa-6 pb-2 d-flex justify-space-between align-center">
+            <span class="text-h6 font-weight-bold">Directorio de Lugares</span>
+            <v-btn icon="mdi-refresh" variant="tonal" size="small" color="primary" @click="cargarLugares"></v-btn>
           </v-card-title>
-
-          <v-card-text>
-            <v-list v-if="lugares.length > 0">
-              <v-list-item
-                v-for="lugar in lugares"
-                :key="lugar.id"
-                :title="lugar.nombre"
-                :subtitle="`${lugar.direccion} · ${getDepartamentoNombre(lugar.departamentoId)}`"
-                @click="seleccionarLugar(lugar)"
-                :class="{
-                  'lugar-activo': lugarSeleccionado?.id === lugar.id,
-                  'lugar-editando': editandoLugar && lugarSeleccionado?.id === lugar.id,
-                }"
-                lines="two"
-              >
-                <template v-slot:prepend>
-                  <v-badge :color="lugar.activo ? 'success' : 'error'" dot inline class="mr-3">
-                    <v-avatar
-                      :color="lugarSeleccionado?.id === lugar.id ? 'primary' : 'grey-lighten-1'"
-                      size="36"
-                    >
-                      <v-icon size="small" color="white"> mdi-map-marker </v-icon>
+          
+          <v-card-text class="pa-0 flex-grow-1 overflow-auto" style="max-height: 600px;">
+            <v-list class="bg-transparent" lines="two">
+              <template v-for="(lugar, i) in lugares" :key="lugar.id">
+                <v-list-item
+                  @click="seleccionarLugar(lugar)"
+                  class="px-6 py-4 cursor-pointer hover-bg"
+                  :class="{ 'lugar-activo': lugarSeleccionado?.id === lugar.id }"
+                >
+                  <template v-slot:prepend>
+                    <v-avatar :color="lugarSeleccionado?.id === lugar.id ? 'primary' : 'rgba(255,255,255,0.1)'" size="40" rounded="lg" class="mr-4">
+                      <v-icon :color="lugarSeleccionado?.id === lugar.id ? 'white' : 'medium-emphasis'">mdi-office-building</v-icon>
                     </v-avatar>
-                  </v-badge>
-                </template>
-
-                <template v-slot:append>
-                  <div class="d-flex">
-                    <v-btn
-                      icon
-                      size="small"
-                      @click.stop="editarLugar(lugar)"
-                      color="primary"
-                      variant="text"
-                      density="compact"
-                    >
-                      <v-icon size="small">mdi-pencil</v-icon>
-                    </v-btn>
-                    <v-btn
-                      icon
-                      size="small"
-                      @click.stop="eliminarLugar(lugar.id)"
-                      color="error"
-                      variant="text"
-                      density="compact"
-                      class="ml-1"
-                    >
-                      <v-icon size="small">mdi-delete</v-icon>
-                    </v-btn>
-                  </div>
-                </template>
-              </v-list-item>
+                  </template>
+                  
+                  <v-list-item-title class="font-weight-bold mb-1">{{ lugar.nombre }}</v-list-item-title>
+                  <v-list-item-subtitle class="text-medium-emphasis">
+                    {{ getDepartamentoNombre(lugar.departamentoId) }} &bull; {{ lugar.direccion }}
+                  </v-list-item-subtitle>
+                  
+                  <template v-slot:append>
+                    <div class="d-flex align-center">
+                       <v-chip size="x-small" :color="lugar.activo ? 'success' : 'error'" variant="flat" class="mr-2 px-2">
+                        {{ lugar.totalEmpleados || 0 }} EMP
+                      </v-chip>
+                      <v-btn
+                        icon="mdi-delete-outline"
+                        variant="text"
+                        color="error"
+                        size="small"
+                        @click.stop="eliminarLugar(lugar.id)"
+                      ></v-btn>
+                    </div>
+                  </template>
+                </v-list-item>
+                <v-divider v-if="i < lugares.length - 1" class="border-opacity-25 mx-6"></v-divider>
+              </template>
             </v-list>
-
-            <v-alert v-else type="info" variant="tonal">
-              <div class="text-center">
-                <v-icon size="large" class="mb-2">mdi-map-marker-off</v-icon>
-                <div>No hay lugares registrados</div>
-              </div>
-            </v-alert>
-          </v-card-text>
-
-          <v-card-actions>
-            <v-btn
-              block
-              color="primary"
-              variant="tonal"
-              @click="nuevoLugar"
-              prepend-icon="mdi-plus"
-            >
-              Nuevo Lugar
-            </v-btn>
-          </v-card-actions>
-        </v-card>
-
-        <!-- Estadísticas -->
-        <v-card>
-          <v-card-title>
-            <v-icon start>mdi-chart-box</v-icon>
-            Estadísticas
-          </v-card-title>
-
-          <v-card-text>
-            <v-list density="comfortable">
-              <v-list-item class="px-0">
-                <v-list-item-title class="text-body-2">Total Lugares</v-list-item-title>
-                <v-list-item-subtitle class="text-right text-h6 font-weight-bold">
-                  {{ lugares.length }}
-                </v-list-item-subtitle>
-              </v-list-item>
-
-              <v-list-item class="px-0">
-                <v-list-item-title class="text-body-2">Lugares Activos</v-list-item-title>
-                <v-list-item-subtitle class="text-right">
-                  <v-chip size="small" color="success" variant="tonal">
-                    {{ lugaresActivos }}
-                  </v-chip>
-                </v-list-item-subtitle>
-              </v-list-item>
-
-              <v-list-item class="px-0">
-                <v-list-item-title class="text-body-2">Total Empleados</v-list-item-title>
-                <v-list-item-subtitle class="text-right text-h6 font-weight-bold text-primary">
-                  {{ totalEmpleados }}
-                </v-list-item-subtitle>
-              </v-list-item>
-
-              <v-list-item class="px-0">
-                <v-list-item-title class="text-body-2">Puntos en Geocerca</v-list-item-title>
-                <v-list-item-subtitle class="text-right">
-                  <v-chip size="small" :color="estadoGeocerca.type" variant="flat">
-                    {{ puntosGeocerca.length }}
-                  </v-chip>
-                </v-list-item-subtitle>
-              </v-list-item>
-            </v-list>
+            
+            <div v-if="lugares.length === 0" class="text-center pa-10 opacity-50">
+              <v-icon size="48" class="mb-4">mdi-map-marker-off</v-icon>
+              <p>No hay lugares registrados</p>
+            </div>
           </v-card-text>
         </v-card>
       </v-col>
@@ -404,11 +216,9 @@ import MapboxMap from '@/components/MapboxMap.vue'
 import api from '@/services/api'
 import type { LugarTrabajo } from '@/types'
 
-// Referencias
 const mapaRef = ref<InstanceType<typeof MapboxMap>>()
 const mostrarMapa = ref(false)
 
-// Estados
 const lugares = ref<LugarTrabajo[]>([])
 const lugarSeleccionado = ref<LugarTrabajo | null>(null)
 const editandoLugar = ref(false)
@@ -419,89 +229,45 @@ const modoMapa = ref('mover')
 const departamentoFiltro = ref<number | null>(null)
 const centroDepartamento = ref<{ lng: number; lat: number } | null>(null)
 
-// Formulario
 const formLugar = ref({
   nombre: '',
   direccion: '',
   descripcion: '',
-  departamentoId: 1, // La Paz por defecto
+  departamentoId: 1,
 })
 
-// Departamentos con centros definidos
 const departamentos = ref([
-  { id: 1, nombre: 'La Paz', codigo: 'LP', centro: { lng: -68.119, lat: -16.489 } },
-  { id: 2, nombre: 'Cochabamba', codigo: 'CB', centro: { lng: -66.157, lat: -17.393 } },
-  { id: 3, nombre: 'Santa Cruz', codigo: 'SC', centro: { lng: -63.181, lat: -17.784 } },
-  { id: 4, nombre: 'Oruro', codigo: 'OR', centro: { lng: -67.107, lat: -17.966 } },
-  { id: 5, nombre: 'Potosí', codigo: 'PT', centro: { lng: -65.753, lat: -19.583 } },
-  { id: 6, nombre: 'Chuquisaca', codigo: 'CH', centro: { lng: -65.259, lat: -19.047 } },
-  { id: 7, nombre: 'Tarija', codigo: 'TJ', centro: { lng: -64.731, lat: -21.532 } },
-  { id: 8, nombre: 'Beni', codigo: 'BN', centro: { lng: -65.755, lat: -14.834 } },
-  { id: 9, nombre: 'Pando', codigo: 'PD', centro: { lng: -67.183, lat: -11.026 } },
+  { id: 1, nombre: 'La Paz', centro: { lng: -68.119, lat: -16.489 } },
+  { id: 2, nombre: 'Cochabamba', centro: { lng: -66.157, lat: -17.393 } },
+  { id: 3, nombre: 'Santa Cruz', centro: { lng: -63.181, lat: -17.784 } },
+  { id: 4, nombre: 'Oruro', centro: { lng: -67.107, lat: -17.966 } },
+  { id: 5, nombre: 'Potosí', centro: { lng: -65.753, lat: -19.583 } },
+  { id: 6, nombre: 'Chuquisaca', centro: { lng: -65.259, lat: -19.047 } },
+  { id: 7, nombre: 'Tarija', centro: { lng: -64.731, lat: -21.532 } },
+  { id: 8, nombre: 'Beni', centro: { lng: -65.755, lat: -14.834 } },
+  { id: 9, nombre: 'Pando', centro: { lng: -67.183, lat: -11.026 } },
 ])
 
-// Computed
-const totalEmpleados = computed(() => {
-  return lugares.value.reduce((total, lugar) => total + (lugar.totalEmpleados || 0), 0)
+const hayPuntosEnMapa = computed(() => puntosGeocerca.value.length > 0)
+
+const estadoGeocerca = computed(() => {
+  if (puntosGeocerca.value.length === 0) return { type: 'warning' }
+  if (puntosGeocerca.value.length < 3) return { type: 'error' }
+  return { type: 'success' }
 })
 
-const lugaresActivos = computed(() => {
-  return lugares.value.filter((l) => l.activo).length
-})
-
-const hayPuntosEnMapa = computed(() => {
-  return puntosGeocerca.value.length > 0
-})
-
-const estadoGeocerca = computed<{
-  type: 'info' | 'warning' | 'success' | 'error'
-  icon: string
-  titulo: string
-  mensaje: string
-}>(() => {
-  if (puntosGeocerca.value.length === 0) {
-    return {
-      type: 'warning',
-      icon: 'mdi-alert',
-      titulo: 'Geocerca vacía',
-      mensaje: 'No hay puntos en el mapa. Haz clic para agregar o dibuja una geocerca.',
-    }
-  } else if (puntosGeocerca.value.length < 3) {
-    return {
-      type: 'warning',
-      icon: 'mdi-alert-circle',
-      titulo: 'Geocerca incompleta',
-      mensaje: `Faltan ${3 - puntosGeocerca.value.length} puntos para formar una geocerca (mínimo 3)`,
-    }
-  } else {
-    return {
-      type: 'success',
-      icon: 'mdi-check-circle',
-      titulo: 'Geocerca lista',
-      mensaje: `Puedes guardar la geocerca con ${puntosGeocerca.value.length} puntos`,
-    }
-  }
-})
-
-// Lifecycle
 onMounted(async () => {
   await cargarLugares()
-  nextTick(() => {
-    mostrarMapa.value = true
-  })
+  nextTick(() => { mostrarMapa.value = true })
 })
 
-// Métodos
 function getDepartamentoNombre(id: number) {
-  const depto = departamentos.value.find((d) => d.id === id)
-  return depto ? depto.nombre : 'N/A'
+  return departamentos.value.find((d) => d.id === id)?.nombre || 'N/A'
 }
 
 function cambiarDepartamento(id: number) {
   const depto = departamentos.value.find((d) => d.id === id)
-  if (depto && depto.centro) {
-    centroDepartamento.value = depto.centro
-  }
+  if (depto && depto.centro) centroDepartamento.value = depto.centro
 }
 
 async function cargarLugares() {
@@ -514,16 +280,8 @@ async function cargarLugares() {
 }
 
 function seleccionarLugar(lugar: LugarTrabajo) {
-  if (editandoLugar.value && lugarSeleccionado.value?.id === lugar.id) {
-    return // Ya está seleccionado en modo edición
-  }
-
-  if (editandoLugar.value) {
-    if (!confirm('Estás editando un lugar. ¿Deseas cancelar la edición y seleccionar otro?')) {
-      return
-    }
-    cancelarEdicion()
-  }
+  if (editandoLugar.value && lugarSeleccionado.value?.id === lugar.id) return
+  if (editandoLugar.value && !confirm('¿Cancelar edición actual?')) return
 
   lugarSeleccionado.value = lugar
   editandoLugar.value = false
@@ -540,13 +298,10 @@ async function cargarGeocercaLugar(lugarId: number) {
   try {
     const response = await api.get(`/admin/lugares/${lugarId}/geocerca`)
     const geojson = response.data
-
     if (geojson.geometry?.coordinates?.[0]) {
       coordenadasActuales.value = geojson.geometry.coordinates[0]
         .slice(0, -1)
         .map((coord: [number, number]) => ({ lng: coord[0], lat: coord[1] }))
-      
-      // Cargar en el mapa para edición
       if (mapaRef.value && coordenadasActuales.value.length > 0) {
         mapaRef.value.cargarGeocercaParaEdicion(coordenadasActuales.value)
       }
@@ -554,73 +309,30 @@ async function cargarGeocercaLugar(lugarId: number) {
       coordenadasActuales.value = []
     }
   } catch (error) {
-    console.error('Error cargando geocerca:', error)
     coordenadasActuales.value = []
   }
 }
 
 function nuevoLugar() {
-  if (editandoLugar.value) {
-    if (!confirm('Estás editando un lugar. ¿Deseas cancelar y crear uno nuevo?')) {
-      return
-    }
-  }
-
+  if (editandoLugar.value && !confirm('¿Cancelar actual?')) return
   cancelarEdicion()
   lugarSeleccionado.value = null
-  formLugar.value = {
-    nombre: '',
-    direccion: '',
-    descripcion: '',
-    departamentoId: departamentoFiltro.value || 1,
-  }
+  formLugar.value = { nombre: '', direccion: '', descripcion: '', departamentoId: departamentoFiltro.value || 1 }
   puntosGeocerca.value = []
   coordenadasActuales.value = []
-  
-  // Activar modo de edición en el mapa
-  if (mapaRef.value) {
-    mapaRef.value.iniciarEdicionGeocerca()
-  }
+  if (mapaRef.value) mapaRef.value.iniciarEdicionGeocerca()
 }
 
 function habilitarEdicion() {
   if (lugarSeleccionado.value) {
     editandoLugar.value = true
-    
-    // Activar modo de edición en el mapa
-    if (mapaRef.value) {
-      mapaRef.value.iniciarEdicionGeocerca()
-    }
-  }
-}
-
-function editarLugar(lugar: LugarTrabajo) {
-  if (editandoLugar.value && lugarSeleccionado.value?.id !== lugar.id) {
-    if (!confirm('Estás editando otro lugar. ¿Deseas cancelar y editar este?')) {
-      return
-    }
-  }
-
-  lugarSeleccionado.value = lugar
-  editandoLugar.value = true
-  formLugar.value = {
-    nombre: lugar.nombre,
-    direccion: lugar.direccion,
-    descripcion: lugar.descripcion || '',
-    departamentoId: lugar.departamentoId || 1,
-  }
-  cargarGeocercaLugar(lugar.id)
-  
-  // Activar modo de edición en el mapa
-  if (mapaRef.value) {
-    mapaRef.value.iniciarEdicionGeocerca()
+    if (mapaRef.value) mapaRef.value.iniciarEdicionGeocerca()
   }
 }
 
 function cancelarEdicion() {
   editandoLugar.value = false
   if (lugarSeleccionado.value) {
-    // Restaurar datos originales del lugar seleccionado
     formLugar.value = {
       nombre: lugarSeleccionado.value.nombre,
       direccion: lugarSeleccionado.value.direccion,
@@ -632,125 +344,58 @@ function cancelarEdicion() {
 }
 
 async function eliminarLugar(id: number) {
-  if (!confirm('¿Eliminar este lugar? Los empleados perderán su asignación.')) return
-
+  if (!confirm('¿Eliminar lugar de forma permanente?')) return
   try {
     await api.delete(`/admin/lugares/${id}`)
     await cargarLugares()
     if (lugarSeleccionado.value?.id === id) {
       lugarSeleccionado.value = null
       editandoLugar.value = false
-      formLugar.value = { nombre: '', direccion: '', descripcion: '', departamentoId: departamentoFiltro.value || 1 }
       puntosGeocerca.value = []
-      coordenadasActuales.value = []
     }
-    // ✅ Refrescar geocercas del mapa
     if (mapaRef.value) {
       mapaRef.value.limpiarMapa()
       await mapaRef.value.actualizarMapa()
     }
   } catch (error: any) {
-    alert(error.response?.data?.message || 'Error eliminando lugar')
+    alert('Error eliminando lugar')
   }
 }
 
 function limpiarMapa() {
-  if (mapaRef.value) {
-    mapaRef.value.limpiarMapa()
-  }
+  if (mapaRef.value) mapaRef.value.limpiarMapa()
   puntosGeocerca.value = []
 }
 
-
-
 async function guardarLugar() {
-  if (puntosGeocerca.value.length < 3) {
-    alert('Se necesitan al menos 3 puntos para la geocerca')
-    return
-  }
-
+  if (puntosGeocerca.value.length < 3) return alert('Se necesitan al menos 3 puntos')
   guardandoLugar.value = true
-
   try {
     const coordenadas = puntosGeocerca.value.map((p) => ({ x: p.lng, y: p.lat }))
-
-    let response
     if (editandoLugar.value && lugarSeleccionado.value) {
-      // Actualizar — ahora incluye departamentoId y coordenadas opcionales
-      response = await api.put(`/admin/lugares/${lugarSeleccionado.value.id}`, {
-        nombre: formLugar.value.nombre,
-        direccion: formLugar.value.direccion,
-        descripcion: formLugar.value.descripcion,
-        departamentoId: formLugar.value.departamentoId,
-        coordenadas: coordenadas,
+      await api.put(`/admin/lugares/${lugarSeleccionado.value.id}`, {
+        ...formLugar.value, coordenadas,
       })
     } else {
-      // Crear nuevo
-      response = await api.post('/admin/lugares', {
-        ...formLugar.value,
-        coordenadas: coordenadas,
+      const response = await api.post('/admin/lugares', {
+        ...formLugar.value, coordenadas,
       })
       lugarSeleccionado.value = response.data
     }
-
     await cargarLugares()
-
-    // ✅ Refrescar geocercas del mapa
     if (mapaRef.value) {
       mapaRef.value.limpiarMapa()
       await mapaRef.value.actualizarMapa()
     }
-
-    alert(editandoLugar.value ? '✅ Lugar actualizado' : '✅ Lugar creado')
-
-    // Limpiar puntos después de crear/actualizar
     puntosGeocerca.value = []
     coordenadasActuales.value = []
-
-    // Si es nuevo, mantener el formulario para otro lugar
-    if (!editandoLugar.value) {
-      formLugar.value = {
-        nombre: '',
-        direccion: '',
-        descripcion: '',
-        departamentoId: departamentoFiltro.value || 1,
-      }
-    } else {
-      editandoLugar.value = false
-    }
+    editandoLugar.value = false
+    if (!lugarSeleccionado.value) nuevoLugar()
   } catch (error: any) {
-    alert(error.response?.data?.message || 'Error guardando lugar')
+    alert('Error guardando lugar')
   } finally {
     guardandoLugar.value = false
   }
-}
-
-async function guardarSoloGeocerca() {
-  if (!lugarSeleccionado.value || puntosGeocerca.value.length < 3) {
-    alert('Selecciona un lugar y define una geocerca primero')
-    return
-  }
-
-  try {
-    await api.put(`/admin/lugares/${lugarSeleccionado.value.id}/geocerca`, {
-      coordenadas: puntosGeocerca.value.map((p) => ({ x: p.lng, y: p.lat })),
-    })
-
-    // ✅ Refrescar geocercas del mapa
-    if (mapaRef.value) {
-      mapaRef.value.limpiarMapa()
-      await mapaRef.value.actualizarMapa()
-    }
-
-    alert('✅ Geocerca actualizada')
-  } catch (error: any) {
-    alert(error.response?.data?.message || 'Error guardando geocerca')
-  }
-}
-
-// Eventos del componente hijo (MapboxMap)
-function onGeocercaGuardada(geojson: any) {
-  console.log('Geocerca guardada desde componente hijo:', geojson)
 }
 
 function onPuntosCambiados(puntos: Array<{ lng: number; lat: number }>) {
@@ -759,36 +404,12 @@ function onPuntosCambiados(puntos: Array<{ lng: number; lat: number }>) {
 </script>
 
 <style scoped>
+.gap-4 { gap: 16px; }
+.gap-2 { gap: 8px; }
+.hover-bg { transition: background-color 0.2s ease; }
+.hover-bg:hover { background-color: rgba(255,255,255,0.03); }
 .lugar-activo {
-  background-color: rgba(25, 118, 210, 0.08);
-  border-left: 4px solid #1976d2;
-}
-
-.lugar-editando {
-  background-color: rgba(255, 152, 0, 0.08);
-  border-left: 4px solid #ff9800;
-}
-
-.gap-2 {
-  gap: 8px;
-}
-
-.formulario-edicion {
-  border: 2px solid #ff9800;
-  box-shadow: 0 4px 12px rgba(255, 152, 0, 0.15);
-}
-
-.formulario-nuevo {
-  border: 2px solid #4caf50;
-  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.15);
-}
-
-/* Animación para cambios de estado */
-.v-list-item {
-  transition: all 0.3s ease;
-}
-
-.v-list-item:hover {
-  transform: translateX(4px);
+  background: linear-gradient(90deg, rgba(99, 102, 241, 0.15) 0%, rgba(99, 102, 241, 0) 100%);
+  border-left: 4px solid var(--v-theme-primary);
 }
 </style>

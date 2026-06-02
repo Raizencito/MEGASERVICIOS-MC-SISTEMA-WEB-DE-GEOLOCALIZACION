@@ -1,84 +1,97 @@
 <template>
-  <v-container class="fill-height" fluid>
-    <v-row align="center" justify="center">
-      <v-col cols="12" sm="8" md="6" lg="4">
-        <v-card class="elevation-6 rounded-xl" :style="{ maxWidth: '420px' }">
-          <!-- Logo -->
-          <div class="d-flex justify-center mt-6">
-            <img
-              src="@/assets/logo-megaservicios.png"
-              alt="Mega Servicios"
-              style="width: 280px; height: auto; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1))"
-            />
-          </div>
+  <div class="login-wrapper">
+    <!-- Orbes de luz de fondo para el efecto de profundidad (Glow/Mesh Gradient) -->
+    <div class="glow-orb orb-1"></div>
+    <div class="glow-orb orb-2"></div>
+    
+    <v-container class="fill-height" fluid>
+      <v-row align="center" justify="center">
+        <v-col cols="12" sm="8" md="6" lg="4" class="d-flex justify-center">
+          <v-card class="login-card pa-6 rounded-xl text-center" :style="{ width: '100%', maxWidth: '420px' }">
+            <!-- Header / Logo -->
+            <div class="d-flex flex-column align-center mt-4 mb-6">
+              <div class="logo-container mb-4">
+                <img
+                  src="@/assets/logo-megaservicios.png"
+                  alt="Mega Servicios"
+                  class="login-logo"
+                />
+              </div>
+              <h1 class="text-h5 font-weight-black text-white tracking-wide">
+                SISTEMA DE GEOLOCALIZACIÓN
+              </h1>
+              <p class="text-caption text-medium-emphasis mt-1">
+                Monitoreo y Control de Personal de Campo
+              </p>
+            </div>
 
-          <v-divider class="my-4"></v-divider>
+            <!-- Formulario -->
+            <v-card-text class="px-0">
+              <v-form @submit.prevent="login" class="text-left">
+                <v-text-field
+                  v-model="form.usuario"
+                  label="Nombre de Usuario"
+                  prepend-inner-icon="mdi-account-outline"
+                  variant="outlined"
+                  required
+                  :error-messages="errors.usuario"
+                  class="mb-3 custom-input"
+                  density="comfortable"
+                  color="primary"
+                  hide-details="auto"
+                ></v-text-field>
 
-          <!-- Formulario -->
-          <v-card-text>
-            <v-form @submit.prevent="login">
-              <v-text-field
-                v-model="form.usuario"
-                label="Usuario"
-                prepend-icon="mdi-account"
-                variant="outlined"
-                required
-                :error-messages="errors.usuario"
-                class="mb-3"
-                density="comfortable"
-              ></v-text-field>
+                <v-text-field
+                  v-model="form.password"
+                  label="Contraseña"
+                  prepend-inner-icon="mdi-lock-outline"
+                  type="password"
+                  variant="outlined"
+                  required
+                  :error-messages="errors.password"
+                  class="mb-5 custom-input"
+                  density="comfortable"
+                  color="primary"
+                  hide-details="auto"
+                ></v-text-field>
 
-              <v-text-field
-                v-model="form.password"
-                label="Contraseña"
-                prepend-icon="mdi-lock"
-                type="password"
-                variant="outlined"
-                required
-                :error-messages="errors.password"
-                class="mb-4"
-                density="comfortable"
-              ></v-text-field>
+                <!-- Mensaje de Error con estilo -->
+                <transition name="slide-up">
+                  <v-alert v-if="errorMessage" type="error" class="mb-4 text-caption rounded-lg" variant="tonal" density="compact">
+                    {{ errorMessage }}
+                  </v-alert>
+                </transition>
 
-              <v-alert v-if="errorMessage" type="error" class="mb-4" variant="tonal">
-                {{ errorMessage }}
-              </v-alert>
+                <v-btn
+                  type="submit"
+                  block
+                  size="large"
+                  :loading="loading"
+                  :disabled="loading"
+                  class="login-btn text-white font-weight-bold text-none mt-2"
+                >
+                  {{ loading ? 'Validando credenciales...' : 'Ingresar al Panel' }}
+                  <template v-slot:loader>
+                    <v-progress-circular indeterminate color="white" size="22" width="2"></v-progress-circular>
+                  </template>
+                </v-btn>
+              </v-form>
+            </v-card-text>
 
-              <v-btn
-                type="submit"
-                color="#FF6B00"
-                block
-                size="large"
-                :loading="loading"
-                :disabled="loading"
-                class="text-white font-weight-bold text-capitalize"
-                style="border-radius: 8px; transition: all 0.3s ease"
-                @mouseover="hover = true"
-                @mouseleave="hover = false"
-              >
-                {{ loading ? 'Iniciando...' : 'Iniciar Sesión' }}
-              </v-btn>
-            </v-form>
-          </v-card-text>
-
-          <!-- Información de acceso -->
-          <v-card-actions class="justify-center pb-6">
-            <v-alert
-              type="info"
-              variant="outlined"
-              density="compact"
-              border="start"
-              icon="mdi-information"
-              color="#1A5276"
-              class="text-center w-100"
-            >
-              Usuario: <strong>admin</strong> | Contraseña: <strong>admin123</strong>
-            </v-alert>
-          </v-card-actions>
-        </v-card>
-      </v-col>
-    </v-row>
-  </v-container>
+            <!-- Credenciales de demostración de manera elegante -->
+            <v-card-actions class="justify-center px-0 pt-4">
+              <div class="credentials-alert py-2 px-4 w-100 d-flex align-center justify-center gap-2">
+                <v-icon size="16" color="primary">mdi-shield-key-outline</v-icon>
+                <span class="text-caption text-medium-emphasis">
+                  Demo: <strong class="text-white">admin</strong> / <strong class="text-white">admin123</strong>
+                </span>
+              </div>
+            </v-card-actions>
+          </v-card>
+        </v-col>
+      </v-row>
+    </v-container>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -89,7 +102,6 @@ import authService from '@/services/auth'
 const router = useRouter()
 const loading = ref(false)
 const errorMessage = ref('')
-const hover = ref(false)
 
 const form = reactive({
   usuario: 'admin',
@@ -102,7 +114,11 @@ const errors = reactive({
 })
 
 async function login() {
-  // Validación simple
+  // Limpiar errores previos
+  errors.usuario = ''
+  errors.password = ''
+  errorMessage.value = ''
+
   if (!form.usuario.trim()) {
     errors.usuario = 'Usuario es requerido'
     return
@@ -113,7 +129,6 @@ async function login() {
   }
 
   loading.value = true
-  errorMessage.value = ''
 
   try {
     const success = await authService.login({
@@ -124,10 +139,10 @@ async function login() {
     if (success) {
       router.push('/')
     } else {
-      errorMessage.value = 'Credenciales incorrectas'
+      errorMessage.value = 'Usuario o contraseña incorrectos.'
     }
   } catch (error: any) {
-    errorMessage.value = error.response?.data?.message || 'Error de conexión'
+    errorMessage.value = error.response?.data?.message || 'Error de conexión con el servidor.'
   } finally {
     loading.value = false
   }
@@ -135,41 +150,149 @@ async function login() {
 </script>
 
 <style scoped>
-.fill-height {
+/* Contenedor principal con fondo oscuro profundo */
+.login-wrapper {
+  position: relative;
   min-height: 100vh;
-  background: linear-gradient(135deg, #ff6b00 0%, #1a5276 100%);
-  padding: 20px;
+  width: 100vw;
+  background-color: #0B0F19;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
 }
 
-.v-card {
-  backdrop-filter: blur(10px);
-  background: rgba(255, 255, 255, 0.95);
+/* Orbes con efecto Glassmorphism de fondo */
+.glow-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  opacity: 0.4;
+  pointer-events: none;
+  z-index: 0;
+  transition: all 0.5s ease;
 }
 
-.v-btn {
-  transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease;
+.orb-1 {
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, #6366F1 0%, rgba(99, 102, 241, 0) 70%);
+  top: -100px;
+  right: -50px;
 }
 
-.v-btn:hover {
+.orb-2 {
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, #ff6b00 0%, rgba(255, 107, 0, 0) 70%);
+  bottom: -150px;
+  left: -100px;
+}
+
+/* Contenedor de la vista */
+.fill-height {
+  z-index: 1;
+  position: relative;
+}
+
+/* Tarjeta de Login Glassmorphic */
+.login-card {
+  background: rgba(30, 41, 59, 0.45) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Contenedor del Logo */
+.logo-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 16px;
+  padding: 8px;
+}
+
+.login-logo {
+  max-width: 250px;
+  height: auto;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.3));
+}
+
+.tracking-wide {
+  letter-spacing: 1.5px !important;
+  color: #F8FAFC !important;
+  font-size: 1.1rem !important;
+}
+
+/* Personalización de los inputs de Vuetify */
+.custom-input :deep(.v-field) {
+  background: rgba(15, 23, 42, 0.4) !important;
+  border-radius: 12px !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #F8FAFC !important;
+  transition: all 0.3s ease;
+}
+
+.custom-input :deep(.v-field__outline) {
+  display: none !important; /* Quitar borde predeterminado */
+}
+
+.custom-input :deep(.v-field--focused) {
+  border: 1px solid var(--v-theme-primary) !important;
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.25) !important;
+}
+
+.custom-input :deep(.v-label) {
+  color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.custom-input :deep(.v-field__prepend-inner) {
+  color: var(--v-theme-primary) !important;
+}
+
+/* Botón de login con gradiente y efecto de elevación */
+.login-btn {
+  background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%) !important;
+  border: none !important;
+  border-radius: 12px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.5px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  box-shadow: 0 4px 15px rgba(99, 102, 241, 0.35) !important;
+  height: 48px !important;
+}
+
+.login-btn:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(255, 107, 0, 0.3);
+  box-shadow: 0 8px 25px rgba(99, 102, 241, 0.5) !important;
+  filter: brightness(1.1);
 }
 
-.v-btn:active {
+.login-btn:active:not(:disabled) {
   transform: translateY(0);
 }
 
-.v-alert {
-  border-left-width: 4px !important;
+.login-btn:disabled {
+  opacity: 0.6;
+  background: #334155 !important;
 }
 
-/* Estilos para el logo si no tienes el archivo, puedes usar un placeholder */
-/* Si no tienes el logo en assets, reemplaza la img por este div temporal */
-/* 
-<div class="logo-placeholder d-flex justify-center align-center" style="width: 280px; height: 120px; background: #f0f0f0; border-radius: 8px;">
-  <span class="text-h6 font-weight-bold">Mega Servicios</span>
-</div>
-*/
+/* Alerta de credenciales */
+.credentials-alert {
+  background: rgba(99, 102, 241, 0.08) !important;
+  border: 1px solid rgba(99, 102, 241, 0.15) !important;
+  border-radius: 12px;
+}
+
+/* Animaciones */
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: all 0.3s ease;
+}
+
+.slide-up-enter-from,
+.slide-up-leave-to {
+  transform: translateY(10px);
+  opacity: 0;
+}
 </style>

@@ -43,12 +43,54 @@ namespace MapboxMegaservicios.API.Controllers
                 var punto = new Point(request.Longitud, request.Latitud) { SRID = 4326 };
                 var estaEnGeocerca = await VerificarGeocercaAsync(empleadoId, request.Latitud, request.Longitud);
 
+                // Validación anti-spoofing
+                var ultimaUbicacion = await _context.Ubicaciones
+                    .Where(u => u.EmpleadoId == empleadoId)
+                    .OrderByDescending(u => u.FechaHora)
+                    .FirstOrDefaultAsync();
+
+                bool isPossibleSpoofing = false;
+                if (ultimaUbicacion != null)
+                {
+                    double lat1 = ultimaUbicacion.UbicacionEmp.Y;
+                    double lon1 = ultimaUbicacion.UbicacionEmp.X;
+                    double lat2 = request.Latitud;
+                    double lon2 = request.Longitud;
+
+                    double R = 6371e3; // Radio de la Tierra en metros
+                    double phi1 = lat1 * Math.PI / 180;
+                    double phi2 = lat2 * Math.PI / 180;
+                    double deltaPhi = (lat2 - lat1) * Math.PI / 180;
+                    double deltaLambda = (lon2 - lon1) * Math.PI / 180;
+
+                    double a = Math.Sin(deltaPhi / 2) * Math.Sin(deltaPhi / 2) +
+                               Math.Cos(phi1) * Math.Cos(phi2) *
+                               Math.Sin(deltaLambda / 2) * Math.Sin(deltaLambda / 2);
+                    double c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+
+                    double distanceMeters = R * c;
+                    double secondsElapsed = (DateTime.UtcNow - ultimaUbicacion.FechaHora).TotalSeconds;
+
+                    if (secondsElapsed > 0)
+                    {
+                        double speedMps = distanceMeters / secondsElapsed;
+                        double speedKmh = speedMps * 3.6;
+
+                        // Si la velocidad supera 100 km/h y la distancia es mayor a 100 metros (para evitar ruido GPS)
+                        if (distanceMeters > 100 && speedKmh > 100.0)
+                        {
+                            isPossibleSpoofing = true;
+                        }
+                    }
+                }
+
                 var ubicacion = new Ubicacion
                 {
-                    EmpleadoId= empleadoId,
+                    EmpleadoId = empleadoId,
                     UbicacionEmp = punto,
                     FechaHora = DateTime.UtcNow,
-                    EstaEnGeocerca = estaEnGeocerca
+                    EstaEnGeocerca = estaEnGeocerca,
+                    IsPossibleSpoofing = isPossibleSpoofing
                 };
 
                 _context.Ubicaciones.Add(ubicacion);
@@ -65,8 +107,8 @@ namespace MapboxMegaservicios.API.Controllers
                     .Select(l => l.Nombre)
                     .FirstOrDefaultAsync();
 
-                _logger.LogInformation("📍 Ubicación registrada - Empleado: {Nombre} ({Id}), Estado: {Estado}",
-                    nombreEmpleado, empleadoId, estaEnGeocerca ? "DENTRO" : "FUERA");
+                _logger.LogInformation("📍 Ubicación registrada - Empleado: {Nombre} ({Id}), Estado: {Estado}, Spoofing: {Spoofing}",
+                    nombreEmpleado, empleadoId, estaEnGeocerca ? "DENTRO" : "FUERA", isPossibleSpoofing);
 
                 return Ok(new UbicacionDTO
                 {
@@ -77,7 +119,8 @@ namespace MapboxMegaservicios.API.Controllers
                     FechaHora = ubicacion.FechaHora,
                     EstaEnGeocerca = estaEnGeocerca,
                     Estado = estaEnGeocerca ? "Dentro de geocerca" : "Fuera de geocerca",
-                    LugarTrabajo = lugarTrabajo ?? "Sin asignar"
+                    LugarTrabajo = lugarTrabajo ?? "Sin asignar",
+                    IsPossibleSpoofing = isPossibleSpoofing
                 });
             }
             catch (Exception ex)
@@ -270,6 +313,41 @@ namespace MapboxMegaservicios.API.Controllers
 
                     _context.AlertasGeocerca.Add(alerta);
                 }
+            }
+        }
+
+        [HttpGet("spoofing")]
+        [Authorize(Policy = "AdminOnly")]
+        public async Task<ActionResult<List<UbicacionDTO>>> ObtenerUbicacionesSpoofing()
+        {
+            try
+            {
+                var ubicaciones = await _context.Ubicaciones
+                    .Where(u => u.IsPossibleSpoofing)
+                    .Include(u => u.Empleado)
+                        .ThenInclude(e => e.LugarTrabajoActual)
+                    .OrderByDescending(u => u.FechaHora)
+                    .Select(u => new UbicacionDTO
+                    {
+                        EmpleadoId = u.EmpleadoId,
+                        EmpleadoNombre = $"{u.Empleado.Nombres} {u.Empleado.Paterno}",
+                        Latitud = u.UbicacionEmp.Y,
+                        Longitud = u.UbicacionEmp.X,
+                        FechaHora = u.FechaHora,
+                        EstaEnGeocerca = u.EstaEnGeocerca,
+                        Estado = "Sospecha de Spoofing GPS",
+                        LugarTrabajo = u.Empleado.LugarTrabajoActual != null ? u.Empleado.LugarTrabajoActual.Nombre : "Sin asignar",
+                        IsPossibleSpoofing = true
+                    })
+                    .Take(50)
+                    .ToListAsync();
+
+                return Ok(ubicaciones);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error obteniendo ubicaciones de spoofing");
+                return StatusCode(500, new { message = "Error interno del servidor" });
             }
         }
 

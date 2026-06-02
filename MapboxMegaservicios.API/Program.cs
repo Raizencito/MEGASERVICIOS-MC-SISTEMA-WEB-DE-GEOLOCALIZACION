@@ -1,4 +1,4 @@
-﻿using System.IdentityModel.Tokens.Jwt;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Encodings.Web;
@@ -186,6 +186,16 @@ try
     using var scope = app.Services.CreateScope();
     var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     await dbContext.Database.MigrateAsync();
+    try
+    {
+        await dbContext.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE \"Ubicaciones\" ADD COLUMN IF NOT EXISTS \"IsPossibleSpoofing\" boolean NOT NULL DEFAULT false;"
+        );
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"⚠️ No se pudo alterar la tabla Ubicaciones: {ex.Message}");
+    }
     await SeedData.Inicializar(dbContext);
     Console.WriteLine("✅ BD inicializada!");
 }

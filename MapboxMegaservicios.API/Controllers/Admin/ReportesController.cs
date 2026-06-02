@@ -339,6 +339,179 @@ namespace MapboxMegaservicios.API.Controllers.Admin
                 return StatusCode(500, new { message = "Error interno del servidor" });
             }
         }
+
+        [HttpGet("improductividad")]
+        public async Task<ActionResult<List<ReporteImproductividadDTO>>> GenerarReporteImproductividad(
+            [FromQuery] DateTime desde,
+            [FromQuery] DateTime hasta,
+            [FromQuery] int toleranciaMinutosDiarios = 30,
+            [FromQuery] int? empleadoId = null,
+            [FromQuery] int? departamentoId = null,
+            [FromQuery] int? lugarTrabajoId = null)
+        {
+            try
+            {
+                if (desde > hasta)
+                    return BadRequest(new { message = "La fecha 'desde' no puede ser mayor a 'hasta'" });
+
+                var utcDesde = DateTime.SpecifyKind(desde.Date, DateTimeKind.Utc);
+                var utcHasta = DateTime.SpecifyKind(hasta.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc);
+
+                // 1. Obtener empleados filtrados
+                var queryEmpleados = _context.Empleados
+                    .Include(e => e.LugarTrabajoActual)
+                        .ThenInclude(l => l.Departamento)
+                    .Where(e => e.Activo)
+                    .AsQueryable();
+
+                if (empleadoId.HasValue)
+                {
+                    queryEmpleados = queryEmpleados.Where(e => e.Id == empleadoId.Value);
+                }
+                if (lugarTrabajoId.HasValue)
+                {
+                    queryEmpleados = queryEmpleados.Where(e => e.LugarTrabajoActualId == lugarTrabajoId.Value);
+                }
+                else if (departamentoId.HasValue)
+                {
+                    queryEmpleados = queryEmpleados.Where(e => e.LugarTrabajoActual != null && e.LugarTrabajoActual.DepartamentoId == departamentoId.Value);
+                }
+
+                var empleados = await queryEmpleados.ToListAsync();
+                var empleadoIds = empleados.Select(e => e.Id).ToList();
+
+                // 2. Obtener días hábiles en el rango (Lunes a Viernes)
+                var diasHabiles = new List<DateTime>();
+                for (var date = utcDesde.Date; date <= utcHasta.Date; date = date.AddDays(1))
+                {
+                    if (date.DayOfWeek != DayOfWeek.Saturday && date.DayOfWeek != DayOfWeek.Sunday)
+                    {
+                        diasHabiles.Add(date);
+                    }
+                }
+
+                // 3. Obtener asistencias registradas (tipo ENTRADA)
+                var asistencias = await _context.RegistrosAsistencia
+                    .Where(r => r.FechaHora >= utcDesde && r.FechaHora <= utcHasta && r.TipoRegistro == "ENTRADA" && empleadoIds.Contains(r.EmpleadoId))
+                    .Select(r => new { r.EmpleadoId, Fecha = r.FechaHora.Date })
+                    .Distinct()
+                    .ToListAsync();
+
+                var asistenciasMap = asistencias
+                    .GroupBy(a => a.EmpleadoId)
+                    .ToDictionary(g => g.Key, g => g.Select(x => x.Fecha).ToHashSet());
+
+                // 4. Obtener ubicaciones y realizar cruce espacial PostGIS (ST_Within)
+                var ubicaciones = await _context.Ubicaciones
+                    .Where(u => u.FechaHora >= utcDesde && u.FechaHora <= utcHasta && empleadoIds.Contains(u.EmpleadoId))
+                    .Where(u => u.Empleado.LugarTrabajoActual != null && u.Empleado.LugarTrabajoActual.Geocerca != null)
+                    .Select(u => new
+                    {
+                        u.EmpleadoId,
+                        u.FechaHora,
+                        // PostGIS ST_Within
+                        EstaDentro = u.UbicacionEmp.Within(u.Empleado.LugarTrabajoActual.Geocerca)
+                    })
+                    .OrderBy(u => u.EmpleadoId)
+                    .ThenBy(u => u.FechaHora)
+                    .ToListAsync();
+
+                // 5. Agrupar ubicaciones por empleado y día para calcular tiempos
+                var tiemposPorEmpleadoYDia = new Dictionary<int, Dictionary<DateTime, double>>(); // EmpleadoId -> Fecha -> MinutosFuera
+
+                var ubicacionesPorEmpleado = ubicaciones.GroupBy(u => u.EmpleadoId);
+                foreach (var empGroup in ubicacionesPorEmpleado)
+                {
+                    var empId = empGroup.Key;
+                    tiemposPorEmpleadoYDia[empId] = new Dictionary<DateTime, double>();
+
+                    var ubicacionesPorDia = empGroup.GroupBy(u => u.FechaHora.Date);
+                    foreach (var diaGroup in ubicacionesPorDia)
+                    {
+                        var dia = diaGroup.Key;
+                        var listaUbicaciones = diaGroup.OrderBy(u => u.FechaHora).ToList();
+                        double minutosFuera = 0;
+
+                        for (int i = 1; i < listaUbicaciones.Count; i++)
+                        {
+                            var prev = listaUbicaciones[i - 1];
+                            var curr = listaUbicaciones[i];
+                            
+                            // Si el punto actual está fuera de la geocerca, consideramos que estuvo fuera durante el intervalo
+                            if (!curr.EstaDentro)
+                            {
+                                var diff = (curr.FechaHora - prev.FechaHora).TotalMinutes;
+                                // Limitar saltos de tiempo absurdos por si apagó el GPS por horas
+                                if (diff > 0 && diff <= 30)
+                                {
+                                    minutosFuera += diff;
+                                }
+                                else if (diff > 30)
+                                {
+                                    minutosFuera += 5; // Estimación estándar de 5 minutos por transmisión faltante
+                                }
+                            }
+                        }
+
+                        tiemposPorEmpleadoYDia[empId][dia] = minutosFuera;
+                    }
+                }
+
+                // 6. Consolidar el DTO de respuesta para cada empleado
+                var reporteList = new List<ReporteImproductividadDTO>();
+
+                foreach (var emp in empleados)
+                {
+                    var fechasAsistidas = asistenciasMap.ContainsKey(emp.Id) ? asistenciasMap[emp.Id] : new HashSet<DateTime>();
+                    var inasistencias = diasHabiles.Where(d => !fechasAsistidas.Contains(d)).ToList();
+
+                    double totalMinutosFuera = 0;
+                    double totalMinutosPenalizables = 0;
+                    double totalToleranciaAplicada = 0;
+
+                    if (tiemposPorEmpleadoYDia.ContainsKey(emp.Id))
+                    {
+                        foreach (var kvp in tiemposPorEmpleadoYDia[emp.Id])
+                        {
+                            var minutosFueraDelDia = kvp.Value;
+                            var penalizableDelDia = Math.Max(0, minutosFueraDelDia - toleranciaMinutosDiarios);
+                            var toleranciaDelDia = minutosFueraDelDia > 0 ? Math.Min(minutosFueraDelDia, toleranciaMinutosDiarios) : 0;
+
+                            totalMinutosFuera += minutosFueraDelDia;
+                            totalMinutosPenalizables += penalizableDelDia;
+                            totalToleranciaAplicada += toleranciaDelDia;
+                        }
+                    }
+
+                    int totalMinutosFueraInt = (int)Math.Round(totalMinutosFuera);
+                    int totalToleranciaInt = (int)Math.Round(totalToleranciaAplicada);
+                    int totalPenalizablesInt = (int)Math.Round(totalMinutosPenalizables);
+
+                    reporteList.Add(new ReporteImproductividadDTO
+                    {
+                        EmpleadoId = emp.Id,
+                        EmpleadoNombre = $"{emp.Nombres} {emp.Paterno} {emp.Materno}".Trim(),
+                        DepartamentoNombre = emp.LugarTrabajoActual?.Departamento?.Nombre ?? "Sin asignar",
+                        LugarTrabajoNombre = emp.LugarTrabajoActual?.Nombre ?? "Sin asignar",
+                        DiasInasistencia = inasistencias.Count,
+                        FechasInasistencias = inasistencias.Select(d => d.ToString("yyyy-MM-dd")).ToList(),
+                        MinutosFueraGeocerca = totalMinutosFueraInt,
+                        TiempoTotalFueraRuta = $"{totalMinutosFueraInt / 60}h {totalMinutosFueraInt % 60}m",
+                        MinutosToleranciaAplicados = totalToleranciaInt,
+                        TiempoToleranciaAplicado = $"{totalToleranciaInt / 60}h {totalToleranciaInt % 60}m",
+                        MinutosPenalizables = totalPenalizablesInt,
+                        TiempoNetoPenalizable = $"{totalPenalizablesInt / 60}h {totalPenalizablesInt % 60}m"
+                    });
+                }
+
+                return Ok(reporteList);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generando reporte de inasistencias y tiempos improductivos");
+                return StatusCode(500, new { message = "Error interno del servidor" });
+            }
+        }
     }
 
     // DTOs adicionales para reportes

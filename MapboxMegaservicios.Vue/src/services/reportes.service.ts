@@ -58,6 +58,19 @@ class ReportesService {
     return response.data
   }
 
+  async obtenerReporteImproductividad(filtro: FiltroReporte & { toleranciaMinutosDiarios?: number }): Promise<any> {
+    const params = new URLSearchParams()
+    if (filtro.desde) params.append('desde', filtro.desde)
+    if (filtro.hasta) params.append('hasta', filtro.hasta)
+    if (filtro.toleranciaMinutosDiarios !== undefined) params.append('toleranciaMinutosDiarios', filtro.toleranciaMinutosDiarios.toString())
+    if (filtro.empleadoId) params.append('empleadoId', filtro.empleadoId.toString())
+    if (filtro.departamentoId) params.append('departamentoId', filtro.departamentoId.toString())
+    if (filtro.lugarTrabajoId) params.append('lugarTrabajoId', filtro.lugarTrabajoId.toString())
+
+    const response = await api.get(`/admin/reportes/improductividad?${params.toString()}`)
+    return response.data
+  }
+
   async obtenerDepartamentos(): Promise<any[]> {
     const response = await api.get('/admin/lugares/departamentos')
     return response.data
