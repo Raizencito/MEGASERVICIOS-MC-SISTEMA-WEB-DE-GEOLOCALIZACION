@@ -6,6 +6,7 @@ import 'dashboard/dashboard_screen.dart';
 import 'empleados/empleados_screen.dart';
 import 'lugares/lugares_screen.dart';
 import 'reportes/reportes_screen.dart';
+import 'asistencia/asistencia_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -19,6 +20,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final List<Widget> _screens = const [
     DashboardScreen(),
+    AsistenciaScreen(),
     EmpleadosScreen(),
     LugaresScreen(),
     ReportesScreen(),
@@ -26,6 +28,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final List<String> _titles = const [
     'Dashboard',
+    'Asistencia',
     'Empleados',
     'Lugares',
     'Reportes',
@@ -76,6 +79,11 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(Icons.dashboard_outlined),
             activeIcon: Icon(Icons.dashboard),
             label: 'Dashboard',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.fingerprint_outlined),
+            activeIcon: Icon(Icons.fingerprint),
+            label: 'Asistencia',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.people_outline),

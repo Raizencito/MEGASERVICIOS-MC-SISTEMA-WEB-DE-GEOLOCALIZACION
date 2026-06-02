@@ -1,17 +1,33 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import 'providers/auth_provider.dart';
 import 'providers/empleados_provider.dart';
+import 'providers/ubicaciones_provider.dart';
+import 'providers/asistencia_provider.dart';
+import 'services/bg_location_service.dart';
 import 'theme.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  Intl.defaultLocale = 'es';
+  try {
+    await BgLocationService.initialize();
+  } catch (_) {
+    // Background service initialization failed (e.g. missing plugins on first install).
+    // The user can manually enable it from the Asistencia screen later.
+  }
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => EmpleadosProvider()),
+        ChangeNotifierProvider(create: (_) => UbicacionesProvider()),
+        ChangeNotifierProvider(create: (_) => AsistenciaProvider()),
       ],
       child: const SGEMobileApp(),
     ),
@@ -28,10 +44,12 @@ class SGEMobileApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
         DefaultMaterialLocalizations.delegate,
-        DefaultWidgetsLocalizations.delegate,
       ],
       supportedLocales: const [
+        Locale('es', 'BO'),
         Locale('es'),
         Locale('en'),
       ],
