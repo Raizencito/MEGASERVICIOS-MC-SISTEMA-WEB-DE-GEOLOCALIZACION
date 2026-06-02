@@ -61,9 +61,6 @@ namespace MapboxMegaservicios.API.Controllers
                 // 3. Generar token
                 var token = GenerateJwtToken(empleado);
 
-                // DEBUG: Mostrar token en consola
-                Console.WriteLine($"🔐 TOKEN GENERADO (primeros 50 chars): {token.Substring(0, Math.Min(50, token.Length))}...");
-
                 // 4. Crear DTO de empleado
                 var empleadoDTO = new EmpleadoDTO
                 {
@@ -147,14 +144,10 @@ namespace MapboxMegaservicios.API.Controllers
         {
             try
             {
-                // 1. Obtener clave secreta
-                var secretKey = _configuration["JwtSettings:SecretKey"]
+                var secretKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY")
+                    ?? _configuration["JwtSettings:SecretKey"]
                     ?? "HolaBolaCarambolaHastaLlegarALos32Caracteres";
 
-                // DEBUG: Verificar longitud de clave
-                Console.WriteLine($"🔑 Longitud de clave: {secretKey.Length} caracteres");
-
-                // 2. Crear claims SIMPLIFICADOS
                 var claims = new[]
                 {
                     new Claim(ClaimTypes.NameIdentifier, empleado.Id.ToString()),
@@ -162,82 +155,29 @@ namespace MapboxMegaservicios.API.Controllers
                     new Claim("role", empleado.Usuario == "admin" ? "Administrador" : "Empleado")
                 };
 
-                // 3. Crear clave y credenciales
                 var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
                 var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-                // 4. Crear token SIMPLE
                 var token = new JwtSecurityToken(
                     claims: claims,
                     expires: DateTime.UtcNow.AddHours(8),
                     signingCredentials: creds
                 );
 
-                // 5. Escribir token
-                var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
-
-                // Verificar formato
-                if (tokenString.Split('.').Length != 3)
-                {
-                    throw new Exception("Token generado no tiene formato JWT válido (3 partes)");
-                }
-
-                return tokenString;
+                return new JwtSecurityTokenHandler().WriteToken(token);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error generando JWT token");
-                Console.WriteLine($"❌ ERROR generando token: {ex.Message}");
                 throw;
             }
         }
 
-        [HttpGet("debug-claims")]
+        [HttpGet("check")]
         [Authorize]
-        public IActionResult DebugClaims()
+        public IActionResult HealthCheck()
         {
-            var claims = User.Claims.Select(c => new
-            {
-                Type = c.Type,
-                Value = c.Value,
-                ValueType = c.ValueType
-            }).ToList();
-
-            return Ok(new
-            {
-                IsAuthenticated = User.Identity?.IsAuthenticated,
-                UserName = User.Identity?.Name,
-                Claims = claims
-            });
-        }
-
-        [HttpGet("debug-token")]
-        [Authorize]
-        public IActionResult DebugToken()
-        {
-            var authHeader = HttpContext.Request.Headers["Authorization"].FirstOrDefault();
-
-            return Ok(new
-            {
-                AuthorizationHeader = authHeader,
-                HasBearer = authHeader?.StartsWith("Bearer "),
-                TokenLength = authHeader?.Replace("Bearer ", "").Length,
-                UserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value,
-                UserName = User.Identity?.Name,
-                Role = User.FindFirst("role")?.Value
-            });
-        }
-
-        [HttpGet("test")]
-        [Authorize(Policy = "AdminOnly")]
-        public IActionResult TestAdmin()
-        {
-            return Ok(new
-            {
-                message = "¡Acceso Admin concedido!",
-                user = User.Identity?.Name,
-                role = User.FindFirst("role")?.Value
-            });
+            return Ok(new { message = "API funcionando", user = User.Identity?.Name });
         }
 
         private bool VerifyPassword(string password, string storedHash)

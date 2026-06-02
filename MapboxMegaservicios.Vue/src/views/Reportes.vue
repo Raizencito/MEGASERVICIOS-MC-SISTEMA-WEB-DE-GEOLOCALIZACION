@@ -164,6 +164,9 @@ import { ref, computed, onMounted, watch } from 'vue'
 import reportesService from '@/services/reportes.service'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import { useNotificationStore } from '@/stores/notification'
+
+const notif = useNotificationStore()
 
 const filtros = ref({
   departamentoId: null as number | null,
@@ -198,8 +201,7 @@ async function generarReporte() {
     else if (tipoReporte.value === 'improductividad') await generarPDFImproductividad()
     else await generarPDFGeneral()
   } catch (e) {
-    console.error(e)
-    alert('Error generando reporte')
+    notif.handleApiError(e, 'Error generando reporte')
   } finally {
     cargando.value = false
   }
@@ -250,7 +252,11 @@ async function generarPDFGeneral() {
 }
 
 async function generarPDFIndividual() {
-  if (!filtros.value.empleadoId) return alert("Seleccione un empleado.")
+  if (!filtros.value.empleadoId) {
+    notif.mostrarAdvertencia('Selecciona un empleado')
+    cargando.value = false
+    return
+  }
   const f = { ...filtros.value, departamentoId: undefined, lugarTrabajoId: undefined }
   const datosAlertas = await reportesService.obtenerAlertas(f)
   const datosTiempos = await reportesService.obtenerTiemposFuera(f)

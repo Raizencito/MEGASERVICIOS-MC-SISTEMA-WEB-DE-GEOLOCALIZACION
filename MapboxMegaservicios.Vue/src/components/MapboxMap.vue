@@ -35,6 +35,9 @@ import * as turf from '@turf/turf'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import type { LugarTrabajo, Ubicacion } from '@/types'
 import api from '@/services/api'
+import { useNotificationStore } from '@/stores/notification'
+
+const notif = useNotificationStore()
 
 // Props
 const props = defineProps<{
@@ -291,7 +294,7 @@ const listaEmpleados = computed(() => {
 // Función para simular movimiento
 async function simularMovimiento(lngLat: { lng: number; lat: number }) {
   if (!empleadoSimuladoId.value) {
-     alert('⚠️ Primero selecciona un empleado del selector amarillo')
+     notif.mostrarAdvertencia('Selecciona un empleado del selector amarillo')
      return
   }
   
@@ -323,10 +326,9 @@ async function simularMovimiento(lngLat: { lng: number; lat: number }) {
      
      console.log('✅ Simulación completada')
   
-  } catch(e: any) {
-     console.error('❌ Error simulando:', e)
-     alert('Error al simular ubicación: ' + (e.response?.data?.message || e.message))
-  }
+   } catch(e: any) {
+      notif.handleApiError(e, 'Error al simular ubicación')
+   }
 }
 
 // Cargar todos los datos
@@ -881,7 +883,7 @@ function limpiarMapa() {
 // Guardar geocerca
 async function guardarGeocerca() {
   if (puntos.value.length < 3) {
-    alert('Se necesitan al menos 3 puntos para formar una geocerca')
+    notif.mostrarAdvertencia('Se necesitan al menos 3 puntos para formar una geocerca')
     return
   }
 
@@ -909,18 +911,11 @@ async function guardarGeocerca() {
       geojson,
     })
 
-    // Emitir evento al padre
     emit('geocercaGuardada', geojson)
-
-    alert(
-      `✅ Geocerca guardada exitosamente\nPuntos: ${puntos.value.length}\nÁrea: ${area.toFixed(2)} m²`,
-    )
-
-    // Limpiar después de guardar
+    notif.mostrarExito('Geocerca guardada', `${puntos.value.length} puntos, ${area.toFixed(2)} m²`)
     limpiarMapa()
   } catch (error) {
-    console.error('❌ Error guardando geocerca:', error)
-    alert('❌ Error guardando geocerca')
+    notif.handleApiError(error, 'Error guardando geocerca')
   } finally {
     guardando.value = false
   }

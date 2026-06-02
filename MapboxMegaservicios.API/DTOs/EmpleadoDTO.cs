@@ -47,7 +47,7 @@ namespace MapboxMegaservicios.API.DTOs
             [RegularExpression(@"^\d{5,10}$", ErrorMessage = "El CI debe contener solo números (5-10 dígitos)")]
             public string Ci { get; set; } = string.Empty;
 
-            [RegularExpression(@"^[67]\d{7}$", ErrorMessage = "El teléfono debe comenzar con 6 o 7 y tener 8 dígitos")]
+            [RegularExpression(@"^(|[67]\d{7})$", ErrorMessage = "El teléfono debe comenzar con 6 o 7 y tener 8 dígitos")]
             public string Telefono { get; set; } = string.Empty;
 
             public string? Usuario { get; set; }

@@ -297,6 +297,9 @@
 import { ref, onMounted, reactive, computed } from 'vue'
 import api from '@/services/api'
 import type { Empleado, LugarTrabajo } from '@/types'
+import { useNotificationStore } from '@/stores/notification'
+
+const notif = useNotificationStore()
 
 const empleados = ref<Empleado[]>([])
 const lugares = ref<LugarTrabajo[]>([])
@@ -415,6 +418,10 @@ async function saveEmpleado() {
   if (!form.paterno.trim()) { errors.paterno = 'Requerido'; hasError = true }
   if (!form.nombres.trim()) { errors.nombres = 'Requerido'; hasError = true }
   if (!form.ci.trim()) { errors.ci = 'Requerido'; hasError = true }
+  if (form.telefono.trim() && !/^[67]\d{7}$/.test(form.telefono.trim())) {
+    errors.telefono = 'Debe comenzar con 6 o 7 y tener 8 dígitos'
+    hasError = true
+  }
 
   if (hasError) return
 
@@ -427,7 +434,7 @@ async function saveEmpleado() {
         paterno: form.paterno,
         materno: form.materno,
         nombres: form.nombres,
-        telefono: form.telefono,
+        telefono: form.telefono || null,
         activo: true,
       })
     } else {
@@ -445,7 +452,12 @@ async function saveEmpleado() {
     dialog.value = false
     await loadEmpleados()
   } catch (error: any) {
-    errorMessage.value = error.response?.data?.message || 'Error guardando empleado'
+    const data = error.response?.data
+    if (data?.errors && Array.isArray(data.errors)) {
+      errorMessage.value = data.errors.join('. ')
+    } else {
+      errorMessage.value = data?.message || 'Error guardando empleado'
+    }
   } finally {
     loadingAction.value = false
   }
@@ -462,7 +474,7 @@ async function cambiarLugar() {
     lugarDialog.value = false
     await loadEmpleados()
   } catch (error: any) {
-    alert(error.response?.data?.message || 'Error en asignación')
+    notif.handleApiError(error, 'Error en asignación')
   } finally {
     cambiandoLugar.value = false
   }
@@ -473,8 +485,9 @@ async function toggleActivo(empleado: Empleado) {
   try {
     await api.patch(`/admin/empleados/${empleado.id}/estadoemp`)
     await loadEmpleados()
+    notif.mostrarExito(empleado.activo ? 'Empleado desactivado' : 'Empleado activado')
   } catch (error: any) {
-    alert('Error al cambiar el estado del empleado')
+    notif.handleApiError(error, 'Error al cambiar el estado del empleado')
   }
 }
 </script>

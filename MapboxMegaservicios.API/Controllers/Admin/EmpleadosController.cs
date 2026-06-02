@@ -411,32 +411,6 @@ namespace MapboxMegaservicios.API.Controllers.Admin
             }
         }
 
-        [HttpGet("debug-context")]
-        public ActionResult<string> DebugContextState()
-        {
-            var info = new System.Text.StringBuilder();
-            info.AppendLine("=== DEBUG: ESTADO DEL DBCONTEXT ===");
-
-            // Ver entidades en el ChangeTracker
-            var entries = _context.ChangeTracker.Entries();
-
-            foreach (var entry in entries)
-            {
-                info.AppendLine($"Entidad: {entry.Entity.GetType().Name}, Estado: {entry.State}");
-
-                if (entry.Entity is Empleado emp)
-                {
-                    info.AppendLine($"  -> Empleado ID: {emp.Id}, RolID: {emp.IdRol}, Nombre: {emp.Nombres}");
-                }
-                else if (entry.Entity is Departamento dep)
-                {
-                    info.AppendLine($"  -> Departamento ID: {dep.Id}, Nombre: {dep.Nombre}");
-                }
-            }
-
-            return Ok(info.ToString());
-        }
-
         [HttpGet("{id}/historial-lugares")]
         public async Task<ActionResult<List<HistorialLugarDTO>>> ObtenerHistorialLugares(int id)
         {
@@ -509,8 +483,7 @@ namespace MapboxMegaservicios.API.Controllers.Admin
         }
 
         [HttpPatch("{id}/estadoemp")]
-        [Authorize(Policy = "AdminOnly")]
-        public async Task<ActionResult> ToggleActivo(int id)  // ← Sin request
+        public async Task<ActionResult> ToggleActivo(int id)
         {
             try
             {
@@ -567,35 +540,6 @@ namespace MapboxMegaservicios.API.Controllers.Admin
                     message = "Error interno del servidor"
                 });
             }
-        }
-
-        // Método auxiliar para verificar si es admin
-        private async Task<bool> EsUsuarioAdmin(int id)
-        {
-            var empleado = await _context.Empleados.FindAsync(id);
-            return empleado?.Usuario == "admin";
-        }
-
-        [HttpGet("{id}/debug-info")]
-        [AllowAnonymous]
-        public async Task<ActionResult> DebugInfo(int id)
-        {
-            var empleado = await _context.Empleados
-                .AsNoTracking()
-                .FirstOrDefaultAsync(e => e.Id == id);
-
-            if (empleado == null)
-                return NotFound();
-
-            return Ok(new
-            {
-                id = empleado.Id,
-                nombre = $"{empleado.Nombres} {empleado.Paterno}",
-                idRol = empleado.IdRol,
-                idLugarActual = empleado.LugarTrabajoActualId,
-                activo = empleado.Activo,
-                rolExiste = await _context.Roles.AnyAsync(r => r.Id == empleado.IdRol)
-            });
         }
 
         private (string usuario, string password) GenerarCredencialesAutomaticas(CrearEmpleadoRequest request)

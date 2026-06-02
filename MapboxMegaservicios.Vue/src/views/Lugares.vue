@@ -165,7 +165,7 @@
             <v-list class="bg-transparent" lines="two">
               <template v-for="(lugar, i) in lugares" :key="lugar.id">
                 <v-list-item
-                  @click="seleccionarLugar(lugar)"
+                  @click.stop="seleccionarLugar(lugar)"
                   class="px-6 py-4 cursor-pointer hover-bg"
                   :class="{ 'lugar-activo': lugarSeleccionado?.id === lugar.id }"
                 >
@@ -215,6 +215,9 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import MapboxMap from '@/components/MapboxMap.vue'
 import api from '@/services/api'
 import type { LugarTrabajo } from '@/types'
+import { useNotificationStore } from '@/stores/notification'
+
+const notif = useNotificationStore()
 
 const mapaRef = ref<InstanceType<typeof MapboxMap>>()
 const mostrarMapa = ref(false)
@@ -358,7 +361,7 @@ async function eliminarLugar(id: number) {
       await mapaRef.value.actualizarMapa()
     }
   } catch (error: any) {
-    alert('Error eliminando lugar')
+    notif.handleApiError(error, 'Error eliminando lugar')
   }
 }
 
@@ -368,7 +371,10 @@ function limpiarMapa() {
 }
 
 async function guardarLugar() {
-  if (puntosGeocerca.value.length < 3) return alert('Se necesitan al menos 3 puntos')
+  if (puntosGeocerca.value.length < 3) {
+    notif.mostrarAdvertencia('Dibuja al menos 3 puntos en el mapa')
+    return
+  }
   guardandoLugar.value = true
   try {
     const coordenadas = puntosGeocerca.value.map((p) => ({ x: p.lng, y: p.lat }))
@@ -392,7 +398,7 @@ async function guardarLugar() {
     editandoLugar.value = false
     if (!lugarSeleccionado.value) nuevoLugar()
   } catch (error: any) {
-    alert('Error guardando lugar')
+    notif.handleApiError(error, 'Error guardando lugar')
   } finally {
     guardandoLugar.value = false
   }

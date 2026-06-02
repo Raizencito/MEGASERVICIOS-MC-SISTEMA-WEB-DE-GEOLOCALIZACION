@@ -38,6 +38,7 @@ namespace MapboxMegaservicios.API.Controllers.Admin
                         Nombre = l.Nombre,
                         Direccion = l.Direccion,
                         Descripcion = l.Descripcion,
+                        DepartamentoId = l.DepartamentoId,
                         TotalEmpleados = l.Empleados.Count(e => e.Activo),
                         Activo = l.Activo,
                         FechaCreacion = l.FechaCreacion

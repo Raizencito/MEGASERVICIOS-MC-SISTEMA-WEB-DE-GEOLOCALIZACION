@@ -116,11 +116,48 @@
           </v-tooltip>
         </v-btn>
 
-        <v-btn icon variant="tonal" color="medium-emphasis" size="small">
-          <v-badge dot color="error">
-            <v-icon>mdi-bell-outline</v-icon>
-          </v-badge>
-        </v-btn>
+        <v-menu offset-y location="bottom end" max-height="400" max-width="380">
+          <template v-slot:activator="{ props }">
+            <v-btn icon variant="tonal" color="medium-emphasis" size="small" v-bind="props">
+              <v-badge :model-value="alertas.length > 0" dot color="error">
+                <v-icon>mdi-bell-outline</v-icon>
+              </v-badge>
+            </v-btn>
+          </template>
+          <v-card rounded="xl" elevation="12" class="glass-panel">
+            <v-card-title class="d-flex justify-space-between align-center pa-4 pb-2">
+              <span class="text-h6 font-weight-bold">Notificaciones</span>
+              <v-chip size="small" color="primary" variant="flat">{{ alertas.length }}</v-chip>
+            </v-card-title>
+            <v-card-text class="pa-0">
+              <v-list v-if="alertas.length > 0" lines="two" class="bg-transparent">
+                <template v-for="(alerta, i) in alertas.slice(0, 10)" :key="alerta.id || i">
+                  <v-list-item class="px-4 py-2">
+                    <template v-slot:prepend>
+                      <v-avatar :color="alerta.tipoAlerta?.toLowerCase().includes('dentro') ? 'success' : 'error'" size="36" variant="tonal">
+                        <v-icon>{{ alerta.tipoAlerta?.toLowerCase().includes('dentro') ? 'mdi-login' : 'mdi-logout' }}</v-icon>
+                      </v-avatar>
+                    </template>
+                    <v-list-item-title class="font-weight-bold text-body-2">
+                      {{ alerta.empleadoNombre }}
+                    </v-list-item-title>
+                    <v-list-item-subtitle class="text-caption">
+                      {{ alerta.tipoAlerta }} — {{ alerta.observaciones }}
+                    </v-list-item-subtitle>
+                    <template v-slot:append>
+                      <span class="text-caption text-medium-emphasis">{{ new Date(alerta.fechaHora).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) }}</span>
+                    </template>
+                  </v-list-item>
+                  <v-divider v-if="i < Math.min(alertas.length, 10) - 1" class="mx-4"></v-divider>
+                </template>
+              </v-list>
+              <div v-else class="pa-6 text-center text-medium-emphasis">
+                <v-icon size="40" class="mb-2">mdi-bell-off-outline</v-icon>
+                <p class="text-body-2">Sin notificaciones</p>
+              </div>
+            </v-card-text>
+          </v-card>
+        </v-menu>
         
         <v-menu offset-y>
           <template v-slot:activator="{ props }">
@@ -155,6 +192,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTheme } from 'vuetify'
 import authService from '@/services/auth'
+import api from '@/services/api'
 import type { Empleado } from '@/types'
 
 const theme = useTheme()
@@ -169,10 +207,29 @@ const router = useRouter()
 const drawer = ref(true)
 const rail = ref(false)
 const user = ref<Empleado | null>(null)
+const alertas = ref<any[]>([])
+const notifLoading = ref(false)
 
 onMounted(() => {
   user.value = authService.getUser()
+  cargarAlertas()
 })
+
+async function cargarAlertas() {
+  notifLoading.value = true
+  try {
+    const hoy = new Date()
+    const ayer = new Date(hoy.getTime() - 24 * 60 * 60 * 1000)
+    const response = await api.get('/ubicaciones/alertas', {
+      params: { desde: ayer.toISOString(), hasta: hoy.toISOString() }
+    })
+    alertas.value = response.data || []
+  } catch {
+    alertas.value = []
+  } finally {
+    notifLoading.value = false
+  }
+}
 
 function logout() {
   authService.logout()
