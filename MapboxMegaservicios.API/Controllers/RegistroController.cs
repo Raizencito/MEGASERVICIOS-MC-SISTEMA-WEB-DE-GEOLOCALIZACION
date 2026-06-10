@@ -29,7 +29,7 @@ namespace MapboxMegaservicios.API.Controllers
             try
             {
                 var empleadoId = GetEmpleadoIdFromToken();
-                if (empleadoId == 0) return Unauthorized();
+                if (empleadoId <= 0) return Unauthorized();
 
                 var ubicacion = await RegistrarUbicacionAsync(empleadoId, request.Latitud, request.Longitud);
 
@@ -68,9 +68,20 @@ namespace MapboxMegaservicios.API.Controllers
             try
             {
                 var empleadoId = GetEmpleadoIdFromToken();
-                if (empleadoId == 0) return Unauthorized();
+                if (empleadoId <= 0) return Unauthorized();
 
-                await RegistrarUbicacionAsync(empleadoId, request.Latitud, request.Longitud);
+                var ubicacion = await RegistrarUbicacionAsync(empleadoId, request.Latitud, request.Longitud);
+
+                if (ubicacion.EstaEnGeocerca == false)
+                {
+                    _logger.LogWarning("❌ Salida rechazada - Fuera de geocerca - Empleado: {EmpleadoId}", empleadoId);
+                    return BadRequest(new RegistroResult
+                    {
+                        Success = false,
+                        Message = "No puedes marcar salida fuera de tu área de trabajo",
+                        Tipo = "RECHAZADA"
+                    });
+                }
 
                 _logger.LogInformation("✅ Salida registrada - Empleado: {EmpleadoId}", empleadoId);
                 return Ok(new RegistroResult
@@ -94,7 +105,7 @@ namespace MapboxMegaservicios.API.Controllers
             try
             {
                 var empleadoId = GetEmpleadoIdFromToken();
-                if (empleadoId == 0) return Unauthorized();
+                if (empleadoId <= 0) return Unauthorized();
 
                 var ultimaUbicacion = await _context.Ubicaciones
                     .Where(u => u.EmpleadoId == empleadoId)
@@ -169,7 +180,7 @@ namespace MapboxMegaservicios.API.Controllers
             var lugarTrabajo = await _context.Empleados
                 .Where(e => e.Id == empleadoId)
                 .Select(e => e.LugarTrabajoActual)
-                .FirstAsync();
+                .FirstOrDefaultAsync();
 
             if (lugarTrabajo?.Geocerca == null) return false;
 
@@ -212,7 +223,7 @@ namespace MapboxMegaservicios.API.Controllers
         private int GetEmpleadoIdFromToken()
         {
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            return int.TryParse(userId, out int empleadoId) ? empleadoId : 0;
+            return int.TryParse(userId, out int empleadoId) ? empleadoId : -1;
         }
     }
 }

@@ -35,13 +35,10 @@ namespace MapboxMegaservicios.API.Controllers.Admin
                     .CountAsync(a => a.FechaHora >= inicioHoy && a.FechaHora < finHoy);
 
                 // Obtener última ubicación de cada empleado (últimas 24 horas)
-                var ubicaciones = await _context.Empleados
-                    .Where(e => e.Activo)
-                    .Select(e => _context.Ubicaciones
-                        .Where(u => u.EmpleadoId == e.Id && u.FechaHora > DateTime.UtcNow.AddHours(-24))
-                        .OrderByDescending(u => u.FechaHora)
-                        .FirstOrDefault())
-                    .Where(u => u != null)
+                var ubicaciones = await _context.Ubicaciones
+                    .Where(u => u.FechaHora > DateTime.UtcNow.AddHours(-24))
+                    .GroupBy(u => u.EmpleadoId)
+                    .Select(g => g.OrderByDescending(u => u.FechaHora).First())
                     .ToListAsync();
 
                 var enGeocerca = ubicaciones.Count(u => u.EstaEnGeocerca == true);
@@ -91,30 +88,33 @@ namespace MapboxMegaservicios.API.Controllers.Admin
         {
             try
             {
-                var ubicaciones = await _context.Empleados
-                    .Where(e => e.Activo)
-                    .Select(e => new 
-                    {
-                        Empleado = e,
-                        Lugar = e.LugarTrabajoActual,
-                        UltimaUbicacion = _context.Ubicaciones
-                            .Where(u => u.EmpleadoId == e.Id && u.FechaHora > DateTime.UtcNow.AddHours(-24))
-                            .OrderByDescending(u => u.FechaHora)
-                            .FirstOrDefault()
-                    })
-                    .Where(x => x.UltimaUbicacion != null)
-                    .Select(x => new UbicacionDTO
-                    {
-                        EmpleadoId = x.Empleado.Id,
-                        EmpleadoNombre = x.Empleado.Nombres + " " + x.Empleado.Paterno,
-                        Latitud = x.UltimaUbicacion!.UbicacionEmp.Y,
-                        Longitud = x.UltimaUbicacion!.UbicacionEmp.X,
-                        FechaHora = x.UltimaUbicacion.FechaHora,
-                        EstaEnGeocerca = x.UltimaUbicacion.EstaEnGeocerca,
-                        Estado = x.UltimaUbicacion.EstaEnGeocerca == true ? "Dentro de geocerca" : "Fuera de geocerca",
-                        LugarTrabajo = x.Lugar != null ? x.Lugar.Nombre : "Sin asignar"
-                    })
+                var ultimasUbicaciones = await _context.Ubicaciones
+                    .Where(u => u.FechaHora > DateTime.UtcNow.AddHours(-24))
+                    .GroupBy(u => u.EmpleadoId)
+                    .Select(g => g.OrderByDescending(u => u.FechaHora).First())
                     .ToListAsync();
+
+                var empleadoIds = ultimasUbicaciones.Select(u => u.EmpleadoId).ToList();
+                var empleados = await _context.Empleados
+                    .Where(e => empleadoIds.Contains(e.Id))
+                    .Include(e => e.LugarTrabajoActual)
+                    .ToDictionaryAsync(e => e.Id);
+
+                var ubicaciones = ultimasUbicaciones.Select(u =>
+                {
+                    empleados.TryGetValue(u.EmpleadoId, out var emp);
+                    return new UbicacionDTO
+                    {
+                        EmpleadoId = u.EmpleadoId,
+                        EmpleadoNombre = emp != null ? $"{emp.Nombres} {emp.Paterno}" : "Desconocido",
+                        Latitud = u.UbicacionEmp.Y,
+                        Longitud = u.UbicacionEmp.X,
+                        FechaHora = u.FechaHora,
+                        EstaEnGeocerca = u.EstaEnGeocerca,
+                        Estado = u.EstaEnGeocerca == true ? "Dentro de geocerca" : "Fuera de geocerca",
+                        LugarTrabajo = emp?.LugarTrabajoActual?.Nombre ?? "Sin asignar"
+                    };
+                }).ToList();
 
                 _logger.LogInformation("🗺️ Mapa generado con {Cantidad} ubicaciones", ubicaciones.Count);
 

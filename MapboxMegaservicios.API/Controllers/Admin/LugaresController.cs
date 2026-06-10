@@ -143,58 +143,6 @@ namespace MapboxMegaservicios.API.Controllers.Admin
         [HttpPost]
         public async Task<ActionResult<LugarTrabajoDTO>> Crear([FromBody] CrearLugarRequest request)
         {
-            var nombreNormalizado = request.Nombre.Trim().ToLower();
-            var direccionNormalizada = NormalizarDireccion(request.Direccion);
-
-            // 1. Validar departamento
-            if (!await _context.Departamentos.AnyAsync(d => d.Id == request.DepartamentoId))
-                return BadRequest(new { message = "Departamento no válido" });
-
-            // 2. Validar nombre EXACTO
-            var existeExacto = await _context.LugaresTrabajo
-                .AnyAsync(l => l.Activo &&
-                              l.Nombre.Trim().ToLower() == nombreNormalizado);
-
-            if (existeExacto)
-                return BadRequest(new { message = "Ya existe un lugar con ese nombre exacto" });
-
-            // 3. Validar nombre SIMILAR (comienzo igual)
-            var lugaresSimilares = await _context.LugaresTrabajo
-                .Where(l => l.Activo)
-                .Select(l => new { l.Nombre, l.Direccion })
-                .ToListAsync();
-
-            var nombresSimilares = lugaresSimilares
-                .Where(l => l.Nombre.Trim().ToLower().StartsWith(nombreNormalizado) ||
-                           nombreNormalizado.StartsWith(l.Nombre.Trim().ToLower()))
-                .Select(l => l.Nombre)
-                .Take(3)
-                .ToList();
-
-            if (nombresSimilares.Any())
-            {
-                return BadRequest(new
-                {
-                    message = "Ya existen lugares con nombres similares",
-                    nombresSimilares
-                });
-            }
-
-            // 4. Validar nombre + dirección similar
-            var direccionesSimilares = lugaresSimilares
-                .Where(l => l.Nombre.Trim().ToLower() == nombreNormalizado &&
-                           NormalizarDireccion(l.Direccion) == direccionNormalizada)
-                .Select(l => l.Direccion)
-                .ToList();
-
-            if (direccionesSimilares.Any())
-            {
-                return BadRequest(new
-                {
-                    message = "Ya existe ese nombre en una dirección similar",
-                    direccionExistente = direccionesSimilares.First()
-                });
-            }
             try
             {
                 // 1. Validar que el departamento existe
@@ -229,7 +177,7 @@ namespace MapboxMegaservicios.API.Controllers.Admin
                     Nombre = request.Nombre.Trim(),
                     Direccion = request.Direccion.Trim(),
                     Descripcion = request.Descripcion?.Trim(),
-                    DepartamentoId = request.DepartamentoId,  // ← ¡ASIGNAR DEPARTAMENTO!
+                    DepartamentoId = request.DepartamentoId,
                     Geocerca = polygon,
                     Activo = true,
                     FechaCreacion = DateTime.UtcNow
@@ -244,7 +192,7 @@ namespace MapboxMegaservicios.API.Controllers.Admin
                     Nombre = lugar.Nombre,
                     Direccion = lugar.Direccion,
                     Descripcion = lugar.Descripcion,
-                    DepartamentoId = lugar.DepartamentoId,  // ← Incluir en respuesta
+                    DepartamentoId = lugar.DepartamentoId,
                     TotalEmpleados = 0,
                     Activo = lugar.Activo
                 });
@@ -408,6 +356,11 @@ namespace MapboxMegaservicios.API.Controllers.Admin
                 if (!lugarExiste)
                     return NotFound(new { message = "Lugar de trabajo no encontrado" });
 
+                var lugar = await _context.LugaresTrabajo
+                    .Where(l => l.Id == id)
+                    .Select(l => l.Nombre)
+                    .FirstOrDefaultAsync();
+
                 var empleados = await _context.Empleados
                     .Where(e => e.Activo && e.LugarTrabajoActualId == id)
                     .Include(e => e.Rol)
@@ -422,7 +375,7 @@ namespace MapboxMegaservicios.API.Controllers.Admin
                         Usuario = e.Usuario,
                         Telefono = e.Telefono,
                         Rol = e.Rol.Nombre,
-                        LugarActual = "Este lugar", // Ya sabemos que está aquí
+                        LugarActual = lugar ?? "Sin asignar",
                         IdLugarTrabajo = e.LugarTrabajoActualId,
                         IdRol = e.IdRol,
                         Activo = e.Activo,

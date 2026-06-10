@@ -76,7 +76,11 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   Future<void> _checkAuth() async {
-    await context.read<AuthProvider>().checkAuth();
+    try {
+      await context.read<AuthProvider>().checkAuth();
+    } catch (e) {
+      debugPrint('Error checking auth: $e');
+    }
     if (mounted) setState(() => _checking = false);
   }
 

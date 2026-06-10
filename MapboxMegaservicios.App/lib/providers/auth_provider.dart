@@ -23,7 +23,9 @@ class AuthProvider extends ChangeNotifier {
         try {
           final userJson = jsonDecode(userStr);
           _user = Empleado.fromJson(userJson as Map<String, dynamic>);
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('Error parsing stored user JSON: $e');
+        }
       }
       notifyListeners();
     }
@@ -54,7 +56,7 @@ class AuthProvider extends ChangeNotifier {
         return true;
       }
 
-      _error = 'Credenciales incorrectas';
+      _error = data['message'] ?? 'Credenciales incorrectas';
       _isLoading = false;
       notifyListeners();
       return false;

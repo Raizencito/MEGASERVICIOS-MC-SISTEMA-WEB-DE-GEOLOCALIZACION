@@ -65,8 +65,8 @@ class BgLocationService {
       service.stopSelf();
     });
 
-    // Start a periodic timer to fetch and post location coordinates every 45 seconds
-    Timer.periodic(const Duration(seconds: 45), (timer) async {
+    // Start a periodic timer to fetch and post location coordinates every 10 seconds (tiempo real)
+    Timer.periodic(const Duration(seconds: 10), (timer) async {
       if (service is AndroidServiceInstance) {
         if (!(await service.isForegroundService())) {
           timer.cancel();
@@ -139,11 +139,10 @@ class BgLocationService {
           '$inGeofence$workplace — SGE MegaServicios',
         );
       } catch (e) {
-        // Silently log/update with minimal sync alert
         _updateNotification(
           flutterLocalNotificationsPlugin,
-          'Monitoreo GPS Activo',
-          'Sincronizando ubicación con el servidor... (Ok)',
+          'SGE — Error de sincronización',
+          '${e.toString().substring(0, (e.toString().length > 80) ? 80 : e.toString().length)}',
         );
       }
     });

@@ -1,6 +1,6 @@
 class JornadaCompleta {
   final int id;
-  final DateTime fecha;
+  final DateTime? fecha;
   final DateTime? horaEntrada;
   final DateTime? horaSalida;
   final double? totalHoras;
@@ -12,7 +12,7 @@ class JornadaCompleta {
 
   JornadaCompleta({
     required this.id,
-    required this.fecha,
+    this.fecha,
     this.horaEntrada,
     this.horaSalida,
     this.totalHoras,
@@ -32,11 +32,11 @@ class JornadaCompleta {
       return null;
     }
 
-    DateTime parseFecha(dynamic value) {
+    DateTime? parseFecha(dynamic value) {
       if (value is String && value.isNotEmpty) {
-        return DateTime.tryParse(value) ?? DateTime.now();
+        return DateTime.tryParse(value);
       }
-      return DateTime.now();
+      return null;
     }
 
     final registrosRaw =
@@ -70,7 +70,7 @@ class JornadaCompleta {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'fecha': fecha.toIso8601String(),
+      'fecha': fecha?.toIso8601String(),
       'horaEntrada': horaEntrada?.toIso8601String(),
       'horaSalida': horaSalida?.toIso8601String(),
       'totalHoras': totalHoras,
@@ -89,6 +89,7 @@ class JornadaCompleta {
   @override
   String toString() =>
       'JornadaCompleta(id: $id, fecha: $fecha, estado: $estado)';
+
 }
 
 class RegistroAsistencia {
@@ -142,9 +143,9 @@ class RegistroAsistencia {
     };
   }
 
-  bool get esEntrada => tipoRegistro.toLowerCase().contains('entrada');
+  bool get esEntrada => tipoRegistro.toUpperCase() == 'ENTRADA';
 
-  bool get esSalida => tipoRegistro.toLowerCase().contains('salida');
+  bool get esSalida => tipoRegistro.toUpperCase() == 'SALIDA';
 
   @override
   String toString() =>

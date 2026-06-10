@@ -108,8 +108,8 @@ namespace MapboxMegaservicios.API.Controllers.Admin
         {
             try
             {
-                _logger.LogInformation("📝 Intentando crear empleado: {Nombres} {Paterno}",
-                    request.Nombres, request.Paterno);
+                _logger.LogInformation("📝 Intentando crear empleado: {Nombres} {Paterno} | CI: {Ci} | IdRol: {IdRol} | Request: {@Request}",
+                    request.Nombres, request.Paterno, request.Ci, request.IdRol, request);
 
                 // 1. VALIDACIONES
                 if (!ModelState.IsValid)
@@ -124,9 +124,9 @@ namespace MapboxMegaservicios.API.Controllers.Admin
                     });
                 }
 
-                // 2. VERIFICAR CI ÚNICO
+                // 2. VERIFICAR CI ÚNICO (incluyendo inactivos para evitar conflictos)
                 var ciExistente = await _context.Empleados
-                    .AnyAsync(e => e.Ci == request.Ci && e.Activo);
+                    .AnyAsync(e => e.Ci == request.Ci);
 
                 if (ciExistente)
                 {
@@ -236,22 +236,22 @@ namespace MapboxMegaservicios.API.Controllers.Admin
             }
             catch (DbUpdateException dbEx)
             {
-                _logger.LogError(dbEx, "❌ Error de base de datos al crear empleado");
+                _logger.LogError(dbEx, "❌ Error de base de datos al crear empleado. Request: {@Request}", request);
                 return StatusCode(500, new
                 {
                     success = false,
                     message = "Error de base de datos",
-                    detail = dbEx.InnerException?.Message ?? dbEx.Message
+                    detail = $"Inner: {dbEx.InnerException?.Message} | {dbEx.Message}"
                 });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "❌ Error inesperado al crear empleado");
+                _logger.LogError(ex, "❌ Error inesperado al crear empleado. Request: {@Request}", request);
                 return StatusCode(500, new
                 {
                     success = false,
                     message = "Error interno del servidor",
-                    detail = ex.Message
+                    detail = $"{ex.GetType().Name}: {ex.Message}"
                 });
             }
         }

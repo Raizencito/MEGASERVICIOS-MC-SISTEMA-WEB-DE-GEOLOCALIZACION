@@ -456,8 +456,9 @@ async function saveEmpleado() {
     if (data?.errors && Array.isArray(data.errors)) {
       errorMessage.value = data.errors.join('. ')
     } else {
-      errorMessage.value = data?.message || 'Error guardando empleado'
+      errorMessage.value = (data?.detail ? `${data?.message}: ${data?.detail}` : data?.message) || 'Error guardando empleado'
     }
+    console.error('Error detallado:', data)
   } finally {
     loadingAction.value = false
   }

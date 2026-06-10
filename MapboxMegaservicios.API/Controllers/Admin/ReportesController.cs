@@ -55,7 +55,7 @@ namespace MapboxMegaservicios.API.Controllers.Admin
                 {
                     query = query.Where(a => a.Empleado.LugarTrabajoActualId == lugarTrabajoId.Value);
                 }
-                else if (departamentoId.HasValue)
+                if (departamentoId.HasValue)
                 {
                     query = query.Where(a => a.Empleado.LugarTrabajoActual != null && a.Empleado.LugarTrabajoActual.DepartamentoId == departamentoId.Value);
                 }
@@ -110,24 +110,34 @@ namespace MapboxMegaservicios.API.Controllers.Admin
                 var utcHasta = DateTime.SpecifyKind(hasta.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc);
 
                 // Obtener última ubicación de cada empleado en ese día
-                var ubicaciones = await _context.Ubicaciones
+                var ultimasUbicaciones = await _context.Ubicaciones
                     .Where(u => u.FechaHora >= utcDesde && u.FechaHora <= utcHasta)
                     .GroupBy(u => u.EmpleadoId)
                     .Select(g => g.OrderByDescending(u => u.FechaHora).First())
-                    .Include(u => u.Empleado)
-                        .ThenInclude(e => e.LugarTrabajoActual)
-                    .Select(u => new UbicacionDTO
+                    .ToListAsync();
+
+                // Cargar datos de empleados por separado (Include tras Select no funciona)
+                var empleadoIds = ultimasUbicaciones.Select(u => u.EmpleadoId).ToList();
+                var empleados = await _context.Empleados
+                    .Where(e => empleadoIds.Contains(e.Id))
+                    .Include(e => e.LugarTrabajoActual)
+                    .ToDictionaryAsync(e => e.Id);
+
+                var ubicaciones = ultimasUbicaciones.Select(u =>
+                {
+                    empleados.TryGetValue(u.EmpleadoId, out var emp);
+                    return new UbicacionDTO
                     {
                         EmpleadoId = u.EmpleadoId,
-                        EmpleadoNombre = $"{u.Empleado.Nombres} {u.Empleado.Paterno}",
+                        EmpleadoNombre = emp != null ? $"{emp.Nombres} {emp.Paterno}" : "Desconocido",
                         Latitud = u.UbicacionEmp.Y,
                         Longitud = u.UbicacionEmp.X,
                         FechaHora = u.FechaHora,
                         EstaEnGeocerca = u.EstaEnGeocerca,
                         Estado = u.EstaEnGeocerca == true ? "Dentro de geocerca" : "Fuera de geocerca",
-                        LugarTrabajo = u.Empleado.LugarTrabajoActual != null ? u.Empleado.LugarTrabajoActual.Nombre : "Sin asignar"
-                    })
-                    .ToListAsync();
+                        LugarTrabajo = emp?.LugarTrabajoActual?.Nombre ?? "Sin asignar"
+                    };
+                }).ToList();
 
                 // Obtener alertas del día
                 var alertas = await _context.AlertasGeocerca
@@ -204,12 +214,19 @@ namespace MapboxMegaservicios.API.Controllers.Admin
                 {
                     query = query.Where(u => u.Empleado.LugarTrabajoActualId == lugarTrabajoId.Value);
                 }
-                else if (departamentoId.HasValue)
+                if (departamentoId.HasValue)
                 {
                     query = query.Where(u => u.Empleado.LugarTrabajoActual != null && u.Empleado.LugarTrabajoActual.DepartamentoId == departamentoId.Value);
                 }
 
                 var ubicaciones = await query.ToListAsync();
+
+                // Construir diccionario de nombres (evita O(n²) con First())
+                var nombreEmpleados = ubicaciones
+                    .Select(u => u.Empleado)
+                    .Where(e => e != null)
+                    .Distinct()
+                    .ToDictionary(e => e.Id, e => $"{e.Nombres} {e.Paterno}");
 
                 // Calcular tiempos fuera de geocerca
                 var tiemposPorEmpleado = new Dictionary<string, TimeSpan>();
@@ -222,11 +239,9 @@ namespace MapboxMegaservicios.API.Controllers.Admin
                     if (ubicacion.EmpleadoId != empleadoActual)
                     {
                         // Nuevo empleado, resetear contadores
-                        if (empleadoActual != 0)
+                        if (empleadoActual != 0 && nombreEmpleados.TryGetValue(empleadoActual, out var nom))
                         {
-                            var nombreEmpleado = $"{ubicaciones.First(u => u.EmpleadoId == empleadoActual).Empleado.Nombres} " +
-                                               $"{ubicaciones.First(u => u.EmpleadoId == empleadoActual).Empleado.Paterno}";
-                            tiemposPorEmpleado[nombreEmpleado] = tiempoFueraAcumulado;
+                            tiemposPorEmpleado[nom] = tiempoFueraAcumulado;
                         }
 
                         empleadoActual = ubicacion.EmpleadoId;
@@ -244,11 +259,9 @@ namespace MapboxMegaservicios.API.Controllers.Admin
                 }
 
                 // Agregar el último empleado
-                if (empleadoActual != 0)
+                if (empleadoActual != 0 && nombreEmpleados.TryGetValue(empleadoActual, out var nomFinal))
                 {
-                    var nombreEmpleado = $"{ubicaciones.First(u => u.EmpleadoId == empleadoActual).Empleado.Nombres} " +
-                                       $"{ubicaciones.First(u => u.EmpleadoId == empleadoActual).Empleado.Paterno}";
-                    tiemposPorEmpleado[nombreEmpleado] = tiempoFueraAcumulado;
+                    tiemposPorEmpleado[nomFinal] = tiempoFueraAcumulado;
                 }
 
                 var reporte = new ReporteTiemposFueraDTO
@@ -295,9 +308,12 @@ namespace MapboxMegaservicios.API.Controllers.Admin
 
                 if (formato.ToLower() == "csv")
                 {
+                    string EscapeCsv(string value) =>
+                        $"\"{(value ?? "").Replace("\"", "\"\"")}\"";
+
                     var csv = "Empleado,CI,TipoAlerta,FechaHora,Observaciones\n";
                     csv += string.Join("\n", alertas.Select(a =>
-                        $"\"{a.Empleado}\",\"{a.Ci}\",\"{a.TipoAlerta}\",\"{a.FechaHora}\",\"{a.Observaciones}\""));
+                        $"{EscapeCsv(a.Empleado)},{EscapeCsv(a.Ci)},{EscapeCsv(a.TipoAlerta)},{EscapeCsv(a.FechaHora)},{EscapeCsv(a.Observaciones)}"));
 
                     return File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv",
                         $"alertas_{desde:yyyyMMdd}_{hasta:yyyyMMdd}.csv");
@@ -372,7 +388,7 @@ namespace MapboxMegaservicios.API.Controllers.Admin
                 {
                     queryEmpleados = queryEmpleados.Where(e => e.LugarTrabajoActualId == lugarTrabajoId.Value);
                 }
-                else if (departamentoId.HasValue)
+                if (departamentoId.HasValue)
                 {
                     queryEmpleados = queryEmpleados.Where(e => e.LugarTrabajoActual != null && e.LugarTrabajoActual.DepartamentoId == departamentoId.Value);
                 }
@@ -514,12 +530,4 @@ namespace MapboxMegaservicios.API.Controllers.Admin
         }
     }
 
-    // DTOs adicionales para reportes
-    public class ReporteTiemposFueraDTO
-    {
-        public DateTime Desde { get; set; }
-        public DateTime Hasta { get; set; }
-        public Dictionary<string, TimeSpan> TiemposPorEmpleado { get; set; } = new();
-        public TimeSpan TotalTiempoFuera { get; set; }
-    }
 }

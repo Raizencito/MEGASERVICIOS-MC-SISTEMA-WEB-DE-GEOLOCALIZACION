@@ -23,6 +23,9 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// 2b. SIMULACION (Hosted Service)
+builder.Services.AddHostedService<MapboxMegaservicios.API.Services.SimulacionService>();
+
 // 3. JWT SECRET KEY (from env var > config > fallback)
 var secretKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY")
     ?? builder.Configuration["JwtSettings:SecretKey"]

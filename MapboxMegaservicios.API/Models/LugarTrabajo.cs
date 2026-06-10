@@ -1,6 +1,4 @@
 ﻿using NetTopologySuite.Geometries;
-using System;
-using System.Collections;
 using System.Collections.Generic;
 namespace MapboxMegaservicios.API.Models
 {
@@ -10,7 +8,7 @@ namespace MapboxMegaservicios.API.Models
         public string Nombre { get; set; } = string.Empty;
         public string Direccion { get; set; } = string.Empty;
         public string? Descripcion { get; set; }
-        public Polygon Geocerca { get; set; } = new Polygon(new LinearRing(new Coordinate[] { }));
+        public Polygon? Geocerca { get; set; }
         public bool Activo { get; set; } = true;
         public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
 
