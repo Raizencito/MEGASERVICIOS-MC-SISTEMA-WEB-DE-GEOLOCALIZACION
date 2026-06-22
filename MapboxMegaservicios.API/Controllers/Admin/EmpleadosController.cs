@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using static MapboxMegaservicios.API.DTOs.EmpleadoDTO;
+using NetTopologySuite.Geometries;
 
 namespace MapboxMegaservicios.API.Controllers.Admin
 {
@@ -390,6 +391,26 @@ namespace MapboxMegaservicios.API.Controllers.Admin
                 }
 
                 _logger.LogInformation("✅ Lugar actualizado para empleado {Id}", id);
+
+                // Recalcular geocerca para la última ubicación del empleado
+                var ultimaUbicacion = await _context.Ubicaciones
+                    .Where(u => u.EmpleadoId == id)
+                    .OrderByDescending(u => u.FechaHora)
+                    .FirstOrDefaultAsync();
+                if (ultimaUbicacion != null && request.LugarTrabajoId.HasValue)
+                {
+                    var punto = new Point(ultimaUbicacion.UbicacionEmp.X, ultimaUbicacion.UbicacionEmp.Y) { SRID = 4326 };
+                    var nuevaGeocerca = await _context.LugaresTrabajo
+                        .Where(l => l.Id == request.LugarTrabajoId.Value)
+                        .Select(l => l.Geocerca)
+                        .FirstOrDefaultAsync();
+                    bool nuevaEstaEn = nuevaGeocerca?.Contains(punto) ?? false;
+                    if (ultimaUbicacion.EstaEnGeocerca != nuevaEstaEn)
+                    {
+                        ultimaUbicacion.EstaEnGeocerca = nuevaEstaEn;
+                        await _context.SaveChangesAsync();
+                    }
+                }
 
                 return Ok(new
                 {

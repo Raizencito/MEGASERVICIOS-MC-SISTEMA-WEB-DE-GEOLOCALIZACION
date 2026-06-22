@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 
@@ -13,7 +13,7 @@ namespace MapboxMegaservicios.API.Models
         public string? Observaciones { get; set; }
 
         // Navigation properties
-        public Empleado Empleado { get; set; } = new();
-        public EstadoAlerta EstadoAlerta { get; set; } = new();
+        public Empleado Empleado { get; set; } = null!;
+        public EstadoAlerta EstadoAlerta { get; set; } = null!;
     }
 }

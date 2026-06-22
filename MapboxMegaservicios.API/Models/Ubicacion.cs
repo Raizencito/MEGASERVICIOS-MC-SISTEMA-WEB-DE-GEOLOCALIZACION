@@ -14,6 +14,6 @@ namespace MapboxMegaservicios.API.Models
         public bool IsPossibleSpoofing { get; set; } = false;
 
         // Navigation properties
-        public Empleado Empleado { get; set; } = new();
+        public Empleado Empleado { get; set; } = null!;
     }
 }

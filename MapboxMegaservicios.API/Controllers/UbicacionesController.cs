@@ -351,6 +351,63 @@ namespace MapboxMegaservicios.API.Controllers
             }
         }
 
+        [HttpPost("simular")]
+        // [Authorize(Policy = "AdminOnly")] // Podemos requerir admin si queremos, o dejarlo libre temporalmente
+        public async Task<ActionResult<UbicacionDTO>> SimularUbicacion([FromBody] SimularUbicacionRequest request)
+        {
+            try
+            {
+                var empleado = await _context.Empleados
+                    .Include(e => e.LugarTrabajoActual)
+                    .FirstOrDefaultAsync(e => e.Id == request.EmpleadoId && e.Activo);
+
+                if (empleado == null)
+                    return NotFound(new { message = "Empleado no encontrado o inactivo" });
+
+                var punto = new Point(request.Longitud, request.Latitud) { SRID = 4326 };
+                var estaEnGeocerca = await VerificarGeocercaAsync(request.EmpleadoId, request.Latitud, request.Longitud);
+
+                var ubicacion = new Ubicacion
+                {
+                    EmpleadoId = request.EmpleadoId,
+                    UbicacionEmp = punto,
+                    FechaHora = DateTime.UtcNow,
+                    EstaEnGeocerca = estaEnGeocerca,
+                    IsPossibleSpoofing = false
+                };
+
+                _context.Ubicaciones.Add(ubicacion);
+
+                // Registrar alerta si cambió el estado
+                await RegistrarAlertaSiEsNecesario(request.EmpleadoId, estaEnGeocerca);
+
+                await _context.SaveChangesAsync();
+
+                var nombreEmpleado = $"{empleado.Nombres} {empleado.Paterno}";
+
+                _logger.LogInformation("🎮 Simulación registrada - Empleado: {Nombre} ({Id}), Estado: {Estado}",
+                    nombreEmpleado, request.EmpleadoId, estaEnGeocerca ? "DENTRO" : "FUERA");
+
+                return Ok(new UbicacionDTO
+                {
+                    EmpleadoId = request.EmpleadoId,
+                    EmpleadoNombre = nombreEmpleado,
+                    Latitud = request.Latitud,
+                    Longitud = request.Longitud,
+                    FechaHora = ubicacion.FechaHora,
+                    EstaEnGeocerca = estaEnGeocerca,
+                    Estado = estaEnGeocerca ? "Dentro de geocerca" : "Fuera de geocerca",
+                    LugarTrabajo = empleado.LugarTrabajoActual?.Nombre ?? "Sin asignar",
+                    IsPossibleSpoofing = false
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error simulando ubicación");
+                return StatusCode(500, new { message = "Error interno del servidor" });
+            }
+        }
+
         private int GetEmpleadoIdFromToken()
         {
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -361,6 +418,13 @@ namespace MapboxMegaservicios.API.Controllers
     // DTO interno (no mover a DTOs compartidos)
     public class RegistrarUbicacionRequest
     {
+        public double Latitud { get; set; }
+        public double Longitud { get; set; }
+    }
+
+    public class SimularUbicacionRequest
+    {
+        public int EmpleadoId { get; set; }
         public double Latitud { get; set; }
         public double Longitud { get; set; }
     }

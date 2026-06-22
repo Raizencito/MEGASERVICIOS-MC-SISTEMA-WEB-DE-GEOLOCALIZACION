@@ -291,6 +291,37 @@ const listaEmpleados = computed(() => {
   }))
 })
 
+// Buscar y centrar empleado
+function buscarEmpleado(id: number | null) {
+  if (!id || !map.value) return;
+  const empleado = ubicaciones.value.find(u => u.empleadoId === id);
+  if (empleado && empleado.latitud && empleado.longitud) {
+    map.value.flyTo({ center: [empleado.longitud, empleado.latitud], zoom: 16 });
+    emit('empleadoSeleccionado', empleado);
+    
+    // Abrir popup simulando el click
+    const popups = document.querySelectorAll('.mapboxgl-popup');
+    popups.forEach((popup) => popup.remove());
+    
+    const popupContent = `
+      <div class="empleado-popup">
+        <h4>${empleado.empleadoNombre}</h4>
+        <p><strong>Estado:</strong> ${empleado.estaEnGeocerca ? '✅ En geocerca' : '⚠️ Fuera de geocerca'}</p>
+        <p><strong>Lugar:</strong> ${empleado.lugarTrabajo || 'No asignado'}</p>
+        <p><strong>Última ubicación:</strong> ${empleado.fechaHora ? new Date(empleado.fechaHora).toLocaleString() : 'N/A'}</p>
+        <p><strong>Coordenadas:</strong> ${empleado.latitud.toFixed(6)}, ${empleado.longitud.toFixed(6)}</p>
+      </div>
+    `;
+
+    new mapboxgl.Popup({ closeButton: true, offset: 25 })
+      .setLngLat([empleado.longitud, empleado.latitud])
+      .setHTML(popupContent)
+      .addTo(map.value!);
+  } else {
+    notif.mostrarAdvertencia('No se encontró ubicación para este empleado. Envíe una ubicación primero.');
+  }
+}
+
 // Función para simular movimiento
 async function simularMovimiento(lngLat: { lng: number; lat: number }) {
   if (!empleadoSimuladoId.value) {
@@ -1000,6 +1031,36 @@ defineExpose({
   actualizarEmpleados: cargarUbicacionesEmpleados,
   actualizarLugares: cargarLugares,
   actualizarMapa: cargarDatos, // Nuevo: recargar todo
+  ubicaciones: ubicaciones, // Exponer las ubicaciones actuales
+  listaEmpleados: listaEmpleados, // Exponer lista procesada
+  setEmpleadoSimuladoId: (id: number | null) => { empleadoSimuladoId.value = id },
+  panToEmpleado: (empleadoId: number) => {
+    if (!map.value || !mapaCargado.value) return;
+    const empleado = ubicaciones.value.find(u => u.empleadoId === empleadoId);
+    if (empleado && empleado.latitud && empleado.longitud) {
+      map.value.flyTo({ center: [empleado.longitud, empleado.latitud], zoom: 16 });
+      // Simulamos el click en el marcador del empleado
+      emit('empleadoSeleccionado', empleado);
+      // Abrimos el popup
+      const popups = document.querySelectorAll('.mapboxgl-popup');
+      popups.forEach((popup) => popup.remove());
+      const popupContent = `
+        <div class="empleado-popup">
+          <h4>${empleado.empleadoNombre}</h4>
+          <p><strong>Estado:</strong> ${empleado.estaEnGeocerca ? '✅ En geocerca' : '⚠️ Fuera de geocerca'}</p>
+          <p><strong>Lugar:</strong> ${empleado.lugarTrabajo || 'No asignado'}</p>
+          <p><strong>Última ubicación:</strong> ${empleado.fechaHora ? new Date(empleado.fechaHora).toLocaleString() : 'N/A'}</p>
+          <p><strong>Coordenadas:</strong> ${empleado.latitud.toFixed(6)}, ${empleado.longitud.toFixed(6)}</p>
+        </div>
+      `;
+      new mapboxgl.Popup({ closeButton: true, offset: 25 })
+        .setLngLat([empleado.longitud, empleado.latitud])
+        .setHTML(popupContent)
+        .addTo(map.value!);
+    } else {
+      notif.mostrarAdvertencia('No se encontró ubicación para este empleado');
+    }
+  }
 })
 
 // Método para agregar punto manualmente
@@ -1086,6 +1147,8 @@ function agregarPuntoManual(lng: number, lat: number) {
   padding: 16px;
   max-width: 300px;
   font-family: 'Roboto', sans-serif;
+  background-color: #1e1e2e; /* fondo oscuro */
+  color: #ffffff; /* texto legible */
 }
 
 :deep(.empleado-popup h4) {

@@ -98,16 +98,18 @@
     <v-row>
       <!-- Gráfico -->
       <v-col cols="12" md="4">
-        <v-card elevation="2" rounded="xl" class="h-100">
+        <v-card elevation="2" rounded="xl" class="h-100 d-flex flex-column">
           <v-card-title class="pa-6 pb-2 text-h6 font-weight-bold">
             Distribución de Personal
           </v-card-title>
-          <v-card-text class="pa-6 pt-0 d-flex justify-center align-center h-100" style="min-height: 300px;">
-            <div v-if="loading" class="text-center w-100">
+          <v-card-text class="pa-6 pt-0 flex-grow-1 position-relative">
+            <div v-if="loading" class="text-center w-100 h-100 d-flex justify-center align-center">
               <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
             </div>
-            <Doughnut v-else-if="chartData" :data="chartData" :options="chartOptions" />
-            <div v-else class="text-medium-emphasis">Sin datos para mostrar</div>
+            <div v-else-if="chartData" class="w-100 h-100" style="position: relative; min-height: 250px;">
+              <Doughnut :data="chartData" :options="chartOptions" />
+            </div>
+            <div v-else class="text-medium-emphasis text-center w-100 h-100 d-flex justify-center align-center">Sin datos para mostrar</div>
           </v-card-text>
         </v-card>
       </v-col>
