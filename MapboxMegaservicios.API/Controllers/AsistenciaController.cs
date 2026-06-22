@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using MapboxMegaservicios.API.Models;
 using MapboxMegaservicios.API.Data;
 using MapboxMegaservicios.API.DTOs;
@@ -34,6 +34,9 @@ namespace MapboxMegaservicios.API.Controllers
                 // Verificar que está dentro de su geocerca
                 var estaEnGeocerca = await VerificarGeocercaAsync(empleadoId, request.Latitud, request.Longitud);
 
+                // Registrar ubicación SIEMPRE, incluso si está fuera (para que el pin aparezca en el mapa)
+                var ubicacion = await RegistrarUbicacionAsync(empleadoId, request.Latitud, request.Longitud, estaEnGeocerca);
+
                 if (!estaEnGeocerca)
                 {
                     _logger.LogWarning("❌ Entrada rechazada - Fuera de geocerca - Empleado: {EmpleadoId}", empleadoId);
@@ -61,9 +64,6 @@ namespace MapboxMegaservicios.API.Controllers
                         Tipo = "DUPLICADA"
                     });
                 }
-
-                // Registrar ubicación primero
-                var ubicacion = await RegistrarUbicacionAsync(empleadoId, request.Latitud, request.Longitud);
 
                 // Crear registro de asistencia
                 var registro = new RegistroAsistencia
@@ -135,6 +135,9 @@ namespace MapboxMegaservicios.API.Controllers
                 // Verificar que está dentro de su geocerca (SALIDA también dentro)
                 var estaEnGeocerca = await VerificarGeocercaAsync(empleadoId, request.Latitud, request.Longitud);
 
+                // Registrar ubicación SIEMPRE (para que el pin aparezca en el mapa)
+                var ubicacion = await RegistrarUbicacionAsync(empleadoId, request.Latitud, request.Longitud, estaEnGeocerca);
+
                 if (!estaEnGeocerca)
                 {
                     _logger.LogWarning("❌ Salida rechazada - Fuera de geocerca - Empleado: {EmpleadoId}", empleadoId);
@@ -180,9 +183,6 @@ namespace MapboxMegaservicios.API.Controllers
                         Tipo = "DUPLICADA"
                     });
                 }
-
-                // Registrar ubicación
-                var ubicacion = await RegistrarUbicacionAsync(empleadoId, request.Latitud, request.Longitud);
 
                 // Crear registro de salida
                 var registro = new RegistroAsistencia
@@ -349,20 +349,20 @@ namespace MapboxMegaservicios.API.Controllers
         {
             var punto = new NetTopologySuite.Geometries.Point(longitud, latitud) { SRID = 4326 };
 
-            var lugarTrabajo = await _context.Empleados
+            var geocerca = await _context.Empleados
+                .AsNoTracking()
                 .Where(e => e.Id == empleadoId)
-                .Select(e => e.LugarTrabajoActual)
-                .FirstAsync();
+                .Select(e => e.LugarTrabajoActual != null ? e.LugarTrabajoActual.Geocerca : null)
+                .FirstOrDefaultAsync();
 
-            if (lugarTrabajo?.Geocerca == null) return false;
+            if (geocerca == null) return false;
 
-            return lugarTrabajo.Geocerca.Contains(punto) == true;
+            return geocerca.Contains(punto) == true;
         }
 
-        private async Task<Ubicacion> RegistrarUbicacionAsync(int empleadoId, double latitud, double longitud)
+        private async Task<Ubicacion> RegistrarUbicacionAsync(int empleadoId, double latitud, double longitud, bool estaEnGeocerca)
         {
             var punto = new NetTopologySuite.Geometries.Point(longitud, latitud) { SRID = 4326 };
-            var estaEnGeocerca = await VerificarGeocercaAsync(empleadoId, latitud, longitud);
 
             var ubicacion = new Ubicacion
             {
