@@ -106,7 +106,7 @@
             <div v-if="loading" class="text-center w-100 h-100 d-flex justify-center align-center">
               <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
             </div>
-            <div v-else-if="chartData" class="w-100 h-100" style="position: relative; min-height: 250px;">
+            <div v-else-if="chartData" class="w-100 d-flex justify-center" style="position: relative; height: 300px; max-height: 300px;">
               <Doughnut :data="chartData" :options="chartOptions" />
             </div>
             <div v-else class="text-medium-emphasis text-center w-100 h-100 d-flex justify-center align-center">Sin datos para mostrar</div>
