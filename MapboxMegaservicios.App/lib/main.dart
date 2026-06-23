@@ -6,6 +6,8 @@ import 'providers/auth_provider.dart';
 import 'providers/asistencia_provider.dart';
 import 'services/bg_location_service.dart';
 import 'theme.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'services/api_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 
@@ -14,9 +16,12 @@ void main() async {
   Intl.defaultLocale = 'es';
   try {
     await BgLocationService.initialize();
-  } catch (_) {
-    // Background service initialization failed (e.g. missing plugins on first install).
-    // The user can manually enable it from the Asistencia screen later.
+  } catch (_) {}
+
+  final prefs = await SharedPreferences.getInstance();
+  final customUrl = prefs.getString('custom_base_url');
+  if (customUrl != null && customUrl.isNotEmpty) {
+    ApiService.customBaseUrl = customUrl;
   }
 
   runApp(

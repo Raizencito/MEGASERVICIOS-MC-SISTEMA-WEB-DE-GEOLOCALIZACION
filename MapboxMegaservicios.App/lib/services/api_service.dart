@@ -5,7 +5,12 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
+  static String? customBaseUrl;
+
   static String get _baseUrl {
+    if (customBaseUrl != null && customBaseUrl!.isNotEmpty) {
+      return customBaseUrl!;
+    }
     if (kIsWeb) {
       return 'http://localhost:5001/api';
     }
