@@ -143,6 +143,18 @@
       <v-card-actions class="pa-6">
         <v-spacer></v-spacer>
         <v-btn 
+          color="success" 
+          size="x-large" 
+          variant="flat"
+          rounded="lg"
+          class="text-none font-weight-bold px-8 mr-4 elevation-8"
+          @click="generarReporteExcel" 
+          :loading="cargandoExcel"
+          prepend-icon="mdi-file-excel"
+        >
+          Exportar a Excel
+        </v-btn>
+        <v-btn 
           color="primary" 
           size="x-large" 
           variant="flat"
@@ -165,6 +177,7 @@ import reportesService from '@/services/reportes.service'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { useNotificationStore } from '@/stores/notification'
+import * as XLSX from 'xlsx'
 
 const notif = useNotificationStore()
 
@@ -179,6 +192,7 @@ const filtros = ref({
 const tipoReporte = ref('general')
 const toleranciaMinutosDiarios = ref(30)
 const cargando = ref(false)
+const cargandoExcel = ref(false)
 const departamentos = ref<any[]>([])
 const lugares = ref<any[]>([])
 const empleados = ref<any[]>([])
@@ -351,6 +365,116 @@ async function generarPDFImproductividad() {
   })
 
   doc.save(`RF-05-${filtros.value.desde}.pdf`)
+}
+
+async function generarReporteExcel() {
+  cargandoExcel.value = true
+  try {
+    if (tipoReporte.value === 'descuentos') await generarExcelDescuentos()
+    else if (tipoReporte.value === 'individual') await generarExcelIndividual()
+    else if (tipoReporte.value === 'improductividad') await generarExcelImproductividad()
+    else await generarExcelGeneral()
+  } catch (e) {
+    notif.handleApiError(e, 'Error generando Excel')
+  } finally {
+    cargandoExcel.value = false
+  }
+}
+
+async function generarExcelGeneral() {
+  const f = { ...filtros.value, empleadoId: undefined }
+  const datosAlertas = await reportesService.obtenerAlertas(f)
+  const datosTiempos = await reportesService.obtenerTiemposFuera(f)
+  
+  const wb = XLSX.utils.book_new()
+  
+  const rowsTiempos = Object.entries(datosTiempos.tiemposPorEmpleado || {}).map(([emp, tiempo]: any) => ({
+    'Empleado': emp,
+    'Tiempo Fuera (HH:MM:SS)': tiempo
+  }))
+  const wsTiempos = XLSX.utils.json_to_sheet(rowsTiempos)
+  XLSX.utils.book_append_sheet(wb, wsTiempos, 'Tiempos Fuera')
+  
+  const rowsAlertas = (datosAlertas.alertas || []).map((a: any) => ({
+    'Empleado': a.empleadoNombre,
+    'Fecha/Hora': new Date(a.fechaHora).toLocaleString(),
+    'Tipo': a.tipoAlerta,
+    'Observaciones': a.observaciones
+  }))
+  const wsAlertas = XLSX.utils.json_to_sheet(rowsAlertas)
+  XLSX.utils.book_append_sheet(wb, wsAlertas, 'Últimas Alertas')
+  
+  XLSX.writeFile(wb, `Reporte-General-${filtros.value.desde}.xlsx`)
+}
+
+async function generarExcelIndividual() {
+  if (!filtros.value.empleadoId) {
+    notif.mostrarAdvertencia('Selecciona un empleado')
+    return
+  }
+  const f = { ...filtros.value, departamentoId: undefined, lugarTrabajoId: undefined }
+  const datosAlertas = await reportesService.obtenerAlertas(f)
+  const datosTiempos = await reportesService.obtenerTiemposFuera(f)
+  
+  const wb = XLSX.utils.book_new()
+  
+  const rowsAlertas = (datosAlertas.alertas || []).map((a: any) => ({
+    'Fecha/Hora': new Date(a.fechaHora).toLocaleString(),
+    'Tipo': a.tipoAlerta,
+    'Observaciones': a.observaciones
+  }))
+  const wsAlertas = XLSX.utils.json_to_sheet(rowsAlertas)
+  
+  const tiempoFuera = Object.values(datosTiempos.tiemposPorEmpleado || {})[0] || '00:00:00'
+  XLSX.utils.sheet_add_aoa(wsAlertas, [['', '', '']], { origin: -1 })
+  XLSX.utils.sheet_add_aoa(wsAlertas, [['Resumen:', `Total tiempo fuera: ${tiempoFuera}`, `Alertas: ${datosAlertas.totalAlertas || 0}`]], { origin: -1 })
+  
+  XLSX.utils.book_append_sheet(wb, wsAlertas, 'Reporte Individual')
+  XLSX.writeFile(wb, `Reporte-Individual-${filtros.value.desde}.xlsx`)
+}
+
+async function generarExcelDescuentos() {
+  const datosTiempos = await reportesService.obtenerTiemposFuera({ ...filtros.value })
+  const wb = XLSX.utils.book_new()
+  
+  const rows = Object.entries(datosTiempos.tiemposPorEmpleado || {}).map(([emp, tiempo]: any) => {
+      const partes = tiempo.split(':')
+      const horas = parseInt(partes[0]) + (parseInt(partes[1]) / 60) + (parseInt(partes[2]) / 3600)
+      if (horas <= 0) return null
+      return {
+        'Empleado': emp,
+        'Tiempo Fuera': tiempo,
+        'Descuento Est.': `-${(horas * 15).toFixed(2)} Bs`
+      }
+  }).filter(Boolean)
+
+  if (rows.length === 0) {
+    notif.mostrarAdvertencia('No se registraron tiempos fuera de geocerca.')
+    return
+  }
+  
+  const ws = XLSX.utils.json_to_sheet(rows)
+  XLSX.utils.book_append_sheet(wb, ws, 'Cálculo Descuentos')
+  XLSX.writeFile(wb, `Descuentos-${filtros.value.desde}.xlsx`)
+}
+
+async function generarExcelImproductividad() {
+  const datos = await reportesService.obtenerReporteImproductividad({
+    ...filtros.value, toleranciaMinutosDiarios: toleranciaMinutosDiarios.value
+  })
+
+  const wb = XLSX.utils.book_new()
+  const rows = datos.map((item: any) => ({
+    'Empleado': item.empleadoNombre,
+    'Días Faltas': item.diasInasistencia,
+    'Fuera de Ruta': item.tiempoTotalFueraRuta,
+    'Tolerancia': item.tiempoToleranciaAplicado,
+    'Neto Penalizable': item.tiempoNetoPenalizable
+  }))
+  
+  const ws = XLSX.utils.json_to_sheet(rows)
+  XLSX.utils.book_append_sheet(wb, ws, 'RF-05')
+  XLSX.writeFile(wb, `RF-05-${filtros.value.desde}.xlsx`)
 }
 
 async function cargarCatalogos() {

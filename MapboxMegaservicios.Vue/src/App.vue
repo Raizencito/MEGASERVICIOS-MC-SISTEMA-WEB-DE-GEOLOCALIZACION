@@ -42,16 +42,23 @@ function startPolling() {
        
        if (alertas && alertas.length > 0) {
           const alerta = alertas[0]
-          lastCheck = new Date().toISOString()
+          
+          // Use the alert's timestamp + 1ms to avoid fetching the same alert
+          const alertTime = new Date(alerta.fechaHora)
+          alertTime.setMilliseconds(alertTime.getMilliseconds() + 1)
+          
+          // Only update if the new time is strictly greater (handles unordered arrivals loosely)
+          if (alertTime.toISOString() > lastCheck) {
+            lastCheck = alertTime.toISOString()
+          }
           
           const esEntrada = (alerta.tipoAlerta || '').toLowerCase().includes('dentro')
           notifStore.mostrarExito(
             esEntrada ? 'Empleado en área' : 'Empleado fuera',
             `${alerta.empleadoNombre}: ${alerta.observaciones}`
           )
-       } else {
-          lastCheck = new Date().toISOString()
        }
+       // If no alerts, keep lastCheck exactly as it was, to prevent missing alerts if client clock is behind.
      } catch (e) {
        // silent polling error
      }

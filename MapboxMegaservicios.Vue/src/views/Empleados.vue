@@ -105,6 +105,15 @@
             </td>
             <td class="px-6 py-3 text-right">
               <v-btn
+                icon="mdi-map-marker-radius"
+                variant="text"
+                color="info"
+                size="small"
+                title="Ver en mapa"
+                @click="verEnMapa(empleado)"
+                class="mr-2"
+              ></v-btn>
+              <v-btn
                 icon="mdi-pencil-outline"
                 variant="text"
                 color="primary"
@@ -295,11 +304,13 @@
 
 <script setup lang="ts">
 import { ref, onMounted, reactive, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import api from '@/services/api'
 import type { Empleado, LugarTrabajo } from '@/types'
 import { useNotificationStore } from '@/stores/notification'
 
 const notif = useNotificationStore()
+const router = useRouter()
 
 const empleados = ref<Empleado[]>([])
 const lugares = ref<LugarTrabajo[]>([])
@@ -490,6 +501,10 @@ async function toggleActivo(empleado: Empleado) {
   } catch (error: any) {
     notif.handleApiError(error, 'Error al cambiar el estado del empleado')
   }
+}
+
+function verEnMapa(empleado: Empleado) {
+  router.push({ path: '/lugares', query: { empleadoId: empleado.id } })
 }
 </script>
 

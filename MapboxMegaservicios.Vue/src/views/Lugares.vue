@@ -33,7 +33,42 @@
                 <v-btn value="mover" class="px-4 text-none font-weight-bold">
                   <v-icon start>mdi-cursor-move</v-icon> Mover
                 </v-btn>
+                <v-btn value="simular" class="px-4 text-none font-weight-bold text-warning">
+                  <v-icon start>mdi-account-arrow-right</v-icon> Simular
+                </v-btn>
               </v-btn-toggle>
+
+              <v-autocomplete
+                v-model="empleadoBuscadoId"
+                :items="listaEmpleadosMapa"
+                item-title="nombre"
+                item-value="id"
+                label="Buscar empleado..."
+                prepend-inner-icon="mdi-magnify"
+                variant="solo"
+                density="compact"
+                hide-details
+                clearable
+                class="elevation-4 rounded-lg"
+                style="min-width: 250px"
+                @update:model-value="buscarEmpleadoEnMapa"
+              ></v-autocomplete>
+
+              <v-select
+                v-if="modoMapa === 'simular'"
+                v-model="empleadoSimuladoId"
+                :items="listaEmpleadosMapa"
+                item-title="nombre"
+                item-value="id"
+                label="Simular empleado (amarillo)"
+                variant="solo"
+                density="compact"
+                hide-details
+                bg-color="warning"
+                class="elevation-4 rounded-lg"
+                style="min-width: 250px"
+                @update:model-value="cambiarEmpleadoSimulado"
+              ></v-select>
 
               <v-select
                 v-model="departamentoFiltro"
@@ -212,12 +247,14 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import MapboxMap from '@/components/MapboxMap.vue'
 import api from '@/services/api'
 import type { LugarTrabajo } from '@/types'
 import { useNotificationStore } from '@/stores/notification'
 
 const notif = useNotificationStore()
+const route = useRoute()
 
 const mapaRef = ref<InstanceType<typeof MapboxMap>>()
 const mostrarMapa = ref(false)
@@ -231,6 +268,18 @@ const coordenadasActuales = ref<Array<{ lng: number; lat: number }>>([])
 const modoMapa = ref('mover')
 const departamentoFiltro = ref<number | null>(null)
 const centroDepartamento = ref<{ lng: number; lat: number } | null>(null)
+
+const empleadoBuscadoId = ref<number | null>(null)
+const empleadoSimuladoId = ref<number | null>(null)
+
+const listaTodosEmpleados = ref<any[]>([])
+
+const listaEmpleadosMapa = computed(() => {
+  return listaTodosEmpleados.value.map(e => ({
+    id: e.id,
+    nombre: e.nombreCompleto || `${e.nombres} ${e.paterno}`
+  }))
+})
 
 const formLugar = ref({
   nombre: '',
@@ -260,9 +309,30 @@ const estadoGeocerca = computed(() => {
 })
 
 onMounted(async () => {
-  await cargarLugares()
-  nextTick(() => { mostrarMapa.value = true })
+  await Promise.all([cargarLugares(), cargarEmpleados()])
+  nextTick(() => { 
+    mostrarMapa.value = true 
+    
+    // Si venimos desde la vista de empleados con un ID
+    if (route.query.empleadoId) {
+      const id = parseInt(route.query.empleadoId as string)
+      empleadoBuscadoId.value = id
+      // Dar tiempo a que el mapa cargue
+      setTimeout(() => {
+        buscarEmpleadoEnMapa(id)
+      }, 500)
+    }
+  })
 })
+
+async function cargarEmpleados() {
+  try {
+    const response = await api.get('/admin/empleados')
+    listaTodosEmpleados.value = response.data.filter((e: any) => e.activo)
+  } catch (error) {
+    console.error('Error cargando empleados:', error)
+  }
+}
 
 function getDepartamentoNombre(id: number) {
   return departamentos.value.find((d) => d.id === id)?.nombre || 'N/A'
@@ -271,6 +341,18 @@ function getDepartamentoNombre(id: number) {
 function cambiarDepartamento(id: number) {
   const depto = departamentos.value.find((d) => d.id === id)
   if (depto && depto.centro) centroDepartamento.value = depto.centro
+}
+
+function buscarEmpleadoEnMapa(id: number | null) {
+  if (id && mapaRef.value) {
+    mapaRef.value.panToEmpleado(id)
+  }
+}
+
+function cambiarEmpleadoSimulado(id: number | null) {
+  if (mapaRef.value) {
+    mapaRef.value.setEmpleadoSimuladoId(id)
+  }
 }
 
 async function cargarLugares() {

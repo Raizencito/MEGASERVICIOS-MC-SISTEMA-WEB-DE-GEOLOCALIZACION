@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Encodings.Web;
 using MapboxMegaservicios.API.Data;
+using MapboxMegaservicios.API.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
@@ -18,10 +19,11 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
         x => x.UseNetTopologySuite()
     ));
 
-// 2. CONTROLLERS + SWAGGER
+// 2. CONTROLLERS + SWAGGER + BACKGROUND SERVICES
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddHostedService<DataCleanupService>();
 
 // 2b. SIMULACION (Hosted Service)
 builder.Services.AddHostedService<MapboxMegaservicios.API.Services.SimulacionService>();
