@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Encodings.Web;
 using MapboxMegaservicios.API.Data;
+using MapboxMegaservicios.API.Hubs;
 using MapboxMegaservicios.API.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
@@ -24,6 +25,9 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddHostedService<DataCleanupService>();
+
+// 2.5 SIGNALR
+builder.Services.AddSignalR();
 
 // 3. JWT SECRET KEY (from env var > config > fallback)
 var secretKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY")
@@ -60,14 +64,19 @@ builder.Services.AddAuthorization(options =>
         .Build();
 });
 
-// 6. CORS
+// 6. CORS (SignalR requiere AllowCredentials, que es incompatible con AllowAnyOrigin)
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
     {
-        policy.AllowAnyOrigin()
+        policy.WithOrigins(
+                  "http://localhost:5173",
+                  "http://localhost:5174",
+                  "http://localhost:3000"
+              )
               .AllowAnyHeader()
-              .AllowAnyMethod();
+              .AllowAnyMethod()
+              .AllowCredentials();
     });
 });
 
@@ -89,6 +98,7 @@ app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<UbicacionHub>("/hubs/ubicacion");
 
 // DB MIGRATIONS + SEED
 try
