@@ -18,4 +18,11 @@ namespace MapboxMegaservicios.API.DTOs
         public double Latitud { get; set; }
         public double Longitud { get; set; }
     }
+
+    public class SincronizarOfflineRequest
+    {
+        public double Latitud { get; set; }
+        public double Longitud { get; set; }
+        public DateTime FechaHoraLocal { get; set; }
+    }
 }

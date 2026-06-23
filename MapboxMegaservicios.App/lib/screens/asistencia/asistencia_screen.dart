@@ -1,14 +1,15 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:flutter_background_service/flutter_background_service.dart';
 import '../../theme.dart';
 import '../../models/jornada.dart';
 import '../../providers/asistencia_provider.dart';
 import '../../providers/auth_provider.dart';
-import '../../services/bg_location_service.dart';
+import '../../services/ubicaciones_service.dart';
+import '../../services/database_helper.dart';
 
 class AsistenciaScreen extends StatefulWidget {
   const AsistenciaScreen({super.key});
@@ -22,32 +23,92 @@ class _AsistenciaScreenState extends State<AsistenciaScreen> {
   Position? _currentPosition;
   bool _retrievingGPS = false;
   String? _gpsError;
+  Timer? _locationTimer;
+  String? _lastSyncStatus;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AsistenciaProvider>().loadJornadaHoy();
-      _checkBackgroundServiceStatus();
       _getLiveLocation();
     });
   }
 
-  Future<void> _checkBackgroundServiceStatus() async {
-    try {
-      final running = await FlutterBackgroundService().isRunning();
-      if (mounted) {
-        setState(() {
-          _bgServiceRunning = running;
-        });
+  @override
+  void dispose() {
+    _locationTimer?.cancel();
+    super.dispose();
+  }
+
+  // In-process foreground location sync (replaces buggy background isolate)
+  void _startForegroundSync() {
+    _locationTimer?.cancel();
+    _locationTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
+      try {
+        // Primero, intentar sincronizar pendientes
+        final pendientes = await DatabaseHelper.instance.obtenerUbicacionesPendientes();
+        if (pendientes.isNotEmpty) {
+          debugPrint('🔄 [SYNC] Intentando sincronizar ${pendientes.length} ubicaciones offline...');
+          try {
+            final guardadas = await ubicacionesService.sincronizarOffline(pendientes);
+            debugPrint('✅ [SYNC] Sincronización offline exitosa. Guardadas: $guardadas');
+            final ids = pendientes.map((p) => p['id'] as int).toList();
+            await DatabaseHelper.instance.eliminarUbicacionesSincronizadas(ids);
+          } catch (syncErr) {
+            debugPrint('❌ [SYNC] Falló sincronización offline: $syncErr');
+          }
+        }
+
+        final pos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 0,
+          ),
+        ).timeout(const Duration(seconds: 15));
+
+        debugPrint('📤 [SYNC] Enviando: ${pos.latitude}, ${pos.longitude}');
+
+        try {
+          final result = await ubicacionesService.registrarUbicacion(
+            pos.latitude,
+            pos.longitude,
+          );
+
+          debugPrint('✅ [SYNC] Enviado! Geocerca: ${result.estaEnGeocerca}');
+
+          if (mounted) {
+            setState(() {
+              _currentPosition = pos;
+              _lastSyncStatus = result.estaEnGeocerca == true
+                  ? 'Dentro de geocerca'
+                  : 'Fuera de geocerca';
+            });
+          }
+        } catch (apiErr) {
+          debugPrint('❌ [SYNC] Error de API, guardando offline: $apiErr');
+          await DatabaseHelper.instance.insertarUbicacion(pos.latitude, pos.longitude, DateTime.now());
+          if (mounted) {
+            setState(() {
+              _currentPosition = pos;
+              _lastSyncStatus = '☁️ Offline: Guardado localmente';
+            });
+          }
+        }
+      } catch (e) {
+        debugPrint('❌ [SYNC] Error GPS: $e');
+        if (mounted) {
+          setState(() {
+            _lastSyncStatus = 'Error GPS: ${e.toString().length > 40 ? e.toString().substring(0, 40) : e}';
+          });
+        }
       }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _bgServiceRunning = false;
-        });
-      }
-    }
+    });
+  }
+
+  void _stopForegroundSync() {
+    _locationTimer?.cancel();
+    _locationTimer = null;
   }
 
   Future<void> _getLiveLocation() async {
@@ -134,23 +195,17 @@ class _AsistenciaScreenState extends State<AsistenciaScreen> {
   Future<void> _toggleBackgroundService(bool start) async {
     if (start) {
       await _requestLocationPermissions();
-      // Ensure initialized
-      await BgLocationService.initialize();
-      final started = await FlutterBackgroundService().startService();
-      if (started) {
-        setState(() {
-          _bgServiceRunning = true;
-        });
-        _showSuccessSnackBar('Servicio de geolocalización en segundo plano iniciado.');
-      } else {
-        _showErrorSnackBar('No se pudo iniciar el servicio de geolocalización.');
-      }
+      _startForegroundSync();
+      setState(() {
+        _bgServiceRunning = true;
+      });
+      _showSuccessSnackBar('Rastreo GPS en tiempo real activado. Datos se envían cada 10 seg.');
     } else {
-      FlutterBackgroundService().invoke('stopService');
+      _stopForegroundSync();
       setState(() {
         _bgServiceRunning = false;
       });
-      _showWarningSnackBar('Servicio de geolocalización detenido.');
+      _showWarningSnackBar('Rastreo GPS detenido.');
     }
   }
 
@@ -666,12 +721,16 @@ class _AsistenciaScreenState extends State<AsistenciaScreen> {
                   const SizedBox(height: 2),
                   Text(
                     _bgServiceRunning
-                        ? 'Servicio activo en segundo plano'
+                        ? 'Activo: ${_lastSyncStatus ?? "Sincronizando..."}'
                         : 'Servicio inactivo',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
-                      color: _bgServiceRunning ? AppTheme.success : AppTheme.greyText,
+                      color: _bgServiceRunning
+                          ? (_lastSyncStatus?.contains('Offline') == true
+                              ? AppTheme.accentOrange
+                              : AppTheme.success)
+                          : AppTheme.greyText,
                     ),
                   ),
                 ],

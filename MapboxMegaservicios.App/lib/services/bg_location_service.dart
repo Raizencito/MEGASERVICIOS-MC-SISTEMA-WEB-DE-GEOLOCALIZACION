@@ -67,8 +67,11 @@ class BgLocationService {
 
     // Start a periodic timer to fetch and post location coordinates every 10 seconds (tiempo real)
     Timer.periodic(const Duration(seconds: 10), (timer) async {
+      print('🔄 [BG] Timer tick #${timer.tick}');
+
       if (service is AndroidServiceInstance) {
         if (!(await service.isForegroundService())) {
+          print('❌ [BG] Not a foreground service, stopping timer');
           timer.cancel();
           return;
         }
@@ -77,6 +80,7 @@ class BgLocationService {
       try {
         // 1. Verify that GPS location services are enabled
         final bool isEnabled = await Geolocator.isLocationServiceEnabled();
+        print('📡 [BG] GPS enabled: $isEnabled');
         if (!isEnabled) {
           _updateNotification(
             flutterLocalNotificationsPlugin,
@@ -88,6 +92,7 @@ class BgLocationService {
 
         // 2. Verify and obtain the current location permission
         LocationPermission permission = await Geolocator.checkPermission();
+        print('🔐 [BG] Permission: $permission');
         if (permission == LocationPermission.denied ||
             permission == LocationPermission.deniedForever) {
           _updateNotification(
@@ -99,16 +104,25 @@ class BgLocationService {
         }
 
         // 3. Query the current GPS location coordinates
+        print('📍 [BG] Getting current position...');
         final Position pos = await Geolocator.getCurrentPosition(
           locationSettings: const LocationSettings(
             accuracy: LocationAccuracy.high,
-            distanceFilter: 10,
+            distanceFilter: 0, // Report every position, not just when moved 10m
           ),
+        ).timeout(
+          const Duration(seconds: 15),
+          onTimeout: () {
+            print('⏰ [BG] getCurrentPosition timed out, using last known');
+            throw TimeoutException('GPS timeout');
+          },
         );
+        print('📍 [BG] Position: ${pos.latitude}, ${pos.longitude}');
 
         // 4. Retrieve stored authentication token
         final prefs = await SharedPreferences.getInstance();
         final token = prefs.getString('token');
+        print('🔑 [BG] Token present: ${token != null}');
 
         if (token == null) {
           _updateNotification(
@@ -120,10 +134,12 @@ class BgLocationService {
         }
 
         // 5. Post location to server
+        print('📤 [BG] Sending location to server...');
         final result = await ubicacionesService.registrarUbicacion(
           pos.latitude,
           pos.longitude,
         );
+        print('✅ [BG] Location sent! En geocerca: ${result.estaEnGeocerca}');
 
         // 6. Update persistent foreground notification with actual status
         final String inGeofence = result.estaEnGeocerca == true 
@@ -138,7 +154,15 @@ class BgLocationService {
           'Monitoreo GPS Activo',
           '$inGeofence$workplace — SGE MegaServicios',
         );
+      } on TimeoutException {
+        print('⏰ [BG] GPS position timeout');
+        _updateNotification(
+          flutterLocalNotificationsPlugin,
+          'SGE — GPS Lento',
+          'Esperando señal GPS...',
+        );
       } catch (e) {
+        print('❌ [BG] Error: $e');
         _updateNotification(
           flutterLocalNotificationsPlugin,
           'SGE — Error de sincronización',

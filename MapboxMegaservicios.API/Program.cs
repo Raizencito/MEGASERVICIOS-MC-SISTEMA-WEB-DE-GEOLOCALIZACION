@@ -13,36 +13,33 @@ using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. DB CONTEXT
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(
         builder.Configuration.GetConnectionString("DefaultConnection"),
         x => x.UseNetTopologySuite()
     ));
 
-// 2. CONTROLLERS + SWAGGER + BACKGROUND SERVICES
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddHostedService<DataCleanupService>();
 
-// 2b. SIMULACION (Hosted Service)
 builder.Services.AddHostedService<MapboxMegaservicios.API.Services.SimulacionService>();
 
-// 2.5 SIGNALR
-builder.Services.AddSignalR();
+builder.Services.AddSignalR()
+    .AddJsonProtocol(options =>
+    {
+        options.PayloadSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+    });
 
-// 3. JWT SECRET KEY (from env var > config > fallback)
 var secretKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY")
     ?? builder.Configuration["JwtSettings:SecretKey"]
     ?? "HolaBolaCarambolaHastaLlegarALos32Caracteres";
 var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
 
-// 4. CUSTOM JWT AUTH
 builder.Services.AddAuthentication("CustomJwt")
     .AddScheme<AuthenticationSchemeOptions, CustomJwtAuthenticationHandler>("CustomJwt", null);
 
-// 5. AUTHORIZATION POLICIES
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", policy =>

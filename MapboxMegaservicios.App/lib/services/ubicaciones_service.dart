@@ -20,6 +20,29 @@ class UbicacionesService {
     }
   }
 
+  /// Sends a batch of offline locations to the server.
+  /// POST /api/ubicaciones/sincronizar-offline
+  Future<int> sincronizarOffline(List<Map<String, dynamic>> ubicaciones) async {
+    try {
+      final payload = ubicaciones.map((u) => {
+        'latitud': u['latitud'],
+        'longitud': u['longitud'],
+        'fechaHoraLocal': u['fecha_hora'], // The C# property is FechaHoraLocal
+      }).toList();
+
+      final data = await apiService.postList(
+        '/ubicaciones/sincronizar-offline',
+        payload,
+      );
+
+      return data['guardadas'] ?? 0;
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      throw ApiException('Error en sincronización offline: ${e.toString()}');
+    }
+  }
+
   /// Fetches all work places with their geocerca (geofence) GeoJSON data.
   /// GET /api/admin/lugares/geocercas
   Future<List<LugarConGeocerca>> obtenerLugaresConGeocercas() async {

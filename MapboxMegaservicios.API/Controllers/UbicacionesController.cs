@@ -425,6 +425,82 @@ namespace MapboxMegaservicios.API.Controllers
             }
         }
 
+        [HttpPost("sincronizar-offline")]
+        [Authorize]
+        public async Task<ActionResult> SincronizarOffline([FromBody] List<SincronizarOfflineRequest> ubicacionesOffline)
+        {
+            try
+            {
+                var empleadoId = GetEmpleadoIdFromToken();
+                if (empleadoId == 0) return Unauthorized();
+
+                var empleado = await _context.Empleados.FirstOrDefaultAsync(e => e.Id == empleadoId && e.Activo);
+                if (empleado == null) return Unauthorized(new { message = "Empleado no encontrado o inactivo" });
+
+                var nombreEmpleado = $"{empleado.Nombres} {empleado.Paterno}";
+                var lugarTrabajo = await _context.LugaresTrabajo
+                    .Where(l => l.Id == empleado.LugarTrabajoActualId)
+                    .Select(l => l.Nombre)
+                    .FirstOrDefaultAsync();
+
+                int guardadas = 0;
+                var ubicacionesDto = new List<UbicacionDTO>();
+
+                foreach (var req in ubicacionesOffline)
+                {
+                    var punto = new Point(req.Longitud, req.Latitud) { SRID = 4326 };
+                    var estaEnGeocerca = await VerificarGeocercaAsync(empleadoId, req.Latitud, req.Longitud);
+
+                    var ubicacion = new Ubicacion
+                    {
+                        EmpleadoId = empleadoId,
+                        UbicacionEmp = punto,
+                        FechaHora = req.FechaHoraLocal.ToUniversalTime(),
+                        EstaEnGeocerca = estaEnGeocerca,
+                        IsPossibleSpoofing = false // Podríamos implementar la validación offline luego
+                    };
+
+                    _context.Ubicaciones.Add(ubicacion);
+                    await RegistrarAlertaSiEsNecesario(empleadoId, estaEnGeocerca);
+
+                    ubicacionesDto.Add(new UbicacionDTO
+                    {
+                        EmpleadoId = empleadoId,
+                        EmpleadoNombre = nombreEmpleado,
+                        Latitud = req.Latitud,
+                        Longitud = req.Longitud,
+                        FechaHora = ubicacion.FechaHora,
+                        EstaEnGeocerca = estaEnGeocerca,
+                        Estado = estaEnGeocerca ? "Dentro de geocerca" : "Fuera de geocerca",
+                        LugarTrabajo = lugarTrabajo ?? "Sin asignar",
+                        IsPossibleSpoofing = false
+                    });
+
+                    guardadas++;
+                }
+
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation("🔄 Sincronización offline completada - Empleado: {Nombre} ({Id}). Puntos: {Count}",
+                    nombreEmpleado, empleadoId, guardadas);
+
+                // Opcional: Emitir a SignalR para que el frontend web actualice,
+                // aunque para ráfagas grandes quizás convenga emitir solo la última ubicación
+                if (ubicacionesDto.Any())
+                {
+                    var ultima = ubicacionesDto.OrderByDescending(u => u.FechaHora).First();
+                    await _hubContext.Clients.All.SendAsync("NuevaUbicacion", ultima);
+                }
+
+                return Ok(new { message = "Sincronización exitosa", guardadas });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error sincronizando ubicaciones offline");
+                return StatusCode(500, new { message = "Error interno del servidor" });
+            }
+        }
+
         private int GetEmpleadoIdFromToken()
         {
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -444,5 +520,12 @@ namespace MapboxMegaservicios.API.Controllers
         public int EmpleadoId { get; set; }
         public double Latitud { get; set; }
         public double Longitud { get; set; }
+    }
+
+    public class SincronizarOfflineRequest
+    {
+        public double Latitud { get; set; }
+        public double Longitud { get; set; }
+        public DateTime FechaHoraLocal { get; set; }
     }
 }

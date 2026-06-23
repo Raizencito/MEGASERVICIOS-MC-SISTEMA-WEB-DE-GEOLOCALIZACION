@@ -10,7 +10,7 @@ class ApiService {
       return 'http://localhost:5001/api';
     }
     if (Platform.isAndroid) {
-      return 'http://10.0.2.2:5001/api';
+      return 'http://192.168.0.191:5001/api';
     }
     return 'http://localhost:5001/api';
   }
@@ -50,6 +50,22 @@ class ApiService {
   }
 
   Future<dynamic> post(String endpoint, Map<String, dynamic> body,
+      {bool withAuth = true}) async {
+    try {
+      final url = Uri.parse('$_baseUrl$endpoint');
+      final headers = await _getHeaders(withAuth: withAuth);
+
+      final response = await http
+          .post(url, headers: headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 30));
+
+      return _handleResponse(response);
+    } catch (e) {
+      throw ApiException('Error de conexión: ${e.toString()}');
+    }
+  }
+
+  Future<dynamic> postList(String endpoint, List<dynamic> body,
       {bool withAuth = true}) async {
     try {
       final url = Uri.parse('$_baseUrl$endpoint');
