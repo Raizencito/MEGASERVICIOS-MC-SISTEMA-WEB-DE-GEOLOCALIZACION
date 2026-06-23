@@ -36,6 +36,7 @@ import 'mapbox-gl/dist/mapbox-gl.css'
 import type { LugarTrabajo, Ubicacion } from '@/types'
 import api from '@/services/api'
 import { useNotificationStore } from '@/stores/notification'
+import { startSignalR, onSignalREvent, offSignalREvent } from '@/services/signalr'
 
 const notif = useNotificationStore()
 
@@ -67,7 +68,6 @@ const guardando = ref(false)
 const editandoGeocerca = ref(false)
 const mapaCargado = ref(false) 
 const empleadoSimuladoId = ref<number | null>(null)
-let pollingInterval: any = null // Intervalo para polling
 let simulationMarker: mapboxgl.Marker | null = null // Marcador arrastrable
 
 // Datos del mapa
@@ -205,13 +205,10 @@ watch(mapaCargado, (cargado) => {
 })
 
 // Inicializar mapa
-onMounted(() => {
-  pollingInterval = setInterval(async () => {
-    if (!editandoGeocerca.value) { // No actualizar si estamos editando geocerca intenso
-       await cargarUbicacionesEmpleados()
-       if (props.mostrarEmpleados !== false) actualizarMarcadoresEmpleados()
-    }
-  }, 5000)
+onMounted(async () => {
+  // Escuchar eventos de SignalR para actualizar ubicaciones en tiempo real
+  await startSignalR()
+  onSignalREvent('NuevaUbicacion', handleNuevaUbicacionEnMapa)
 
   if (!mapContainer.value) return
 
@@ -277,11 +274,33 @@ onMounted(() => {
 
 // Limpiar al desmontar
 onUnmounted(() => {
-  if (pollingInterval) clearInterval(pollingInterval)
+  offSignalREvent('NuevaUbicacion', handleNuevaUbicacionEnMapa)
   if (map.value) {
     map.value.remove()
   }
 })
+
+// Handler SignalR: actualizar o insertar la ubicación del empleado en el array reactivo
+function handleNuevaUbicacionEnMapa(ubicacion: any) {
+  const idx = ubicaciones.value.findIndex(u => u.empleadoId === ubicacion.empleadoId)
+  if (idx !== -1) {
+    // Actualizar in-place para que el watch de ubicaciones dispare el redibujado
+    ubicaciones.value[idx] = {
+      ...ubicaciones.value[idx],
+      latitud: ubicacion.latitud,
+      longitud: ubicacion.longitud,
+      estaEnGeocerca: ubicacion.estaEnGeocerca,
+      estado: ubicacion.estado,
+      fechaHora: ubicacion.fechaHora,
+      lugarTrabajo: ubicacion.lugarTrabajo,
+    }
+  } else {
+    // Nuevo empleado: agregar al array
+    ubicaciones.value.push(ubicacion)
+  }
+  // Forzar la reactividad (reemplazar el array)
+  ubicaciones.value = [...ubicaciones.value]
+}
 
 // Lista simple de empleados para el selector
 const listaEmpleados = computed(() => {

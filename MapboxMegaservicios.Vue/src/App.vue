@@ -23,52 +23,43 @@
 
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue'
-import api from '@/services/api'
 import { useNotificationStore } from '@/stores/notification'
+import { startSignalR, stopSignalR, onSignalREvent, offSignalREvent } from '@/services/signalr'
 
 const notifStore = useNotificationStore()
 
-let pollingInterval: any = null
-let lastCheck = new Date().toISOString()
+// Handler para nuevas ubicaciones recibidas por SignalR
+function handleNuevaUbicacion(ubicacion: any) {
+  // Mostrar notificación solo cuando cambia el estado de geocerca
+  if (ubicacion.estado) {
+    const esEntrada = ubicacion.estaEnGeocerca === true
+    notifStore.mostrarExito(
+      esEntrada ? 'Empleado en área' : 'Empleado fuera de área',
+      `${ubicacion.empleadoNombre}: ${ubicacion.estado}`
+    )
+  }
 
-onMounted(() => { startPolling() })
-onUnmounted(() => { stopPolling() })
-
-function startPolling() {
-  pollingInterval = setInterval(async () => {
-     try {
-       const response = await api.get(`/ubicaciones/alertas?desde=${lastCheck}&take=1`)
-       const alertas = response.data
-       
-       if (alertas && alertas.length > 0) {
-          const alerta = alertas[0]
-          
-          // Use the alert's timestamp + 1ms to avoid fetching the same alert
-          const alertTime = new Date(alerta.fechaHora)
-          alertTime.setMilliseconds(alertTime.getMilliseconds() + 1)
-          
-          // Only update if the new time is strictly greater (handles unordered arrivals loosely)
-          if (alertTime.toISOString() > lastCheck) {
-            lastCheck = alertTime.toISOString()
-          }
-          
-          const esEntrada = (alerta.tipoAlerta || '').toLowerCase().includes('dentro')
-          notifStore.mostrarExito(
-            esEntrada ? 'Empleado en área' : 'Empleado fuera',
-            `${alerta.empleadoNombre}: ${alerta.observaciones}`
-          )
-       }
-       // If no alerts, keep lastCheck exactly as it was, to prevent missing alerts if client clock is behind.
-     } catch (e) {
-       // silent polling error
-     }
-  }, 5000)
+  // Notificar si es posible spoofing
+  if (ubicacion.isPossibleSpoofing) {
+    notifStore.mostrarExito(
+      '⚠️ Alerta de Spoofing GPS',
+      `${ubicacion.empleadoNombre}: Movimiento sospechoso detectado`
+    )
+  }
 }
 
-function stopPolling() {
-  if (pollingInterval) clearInterval(pollingInterval)
-}
+onMounted(async () => {
+  // Conectar SignalR y escuchar eventos
+  await startSignalR()
+  onSignalREvent('NuevaUbicacion', handleNuevaUbicacion)
+})
+
+onUnmounted(() => {
+  offSignalREvent('NuevaUbicacion', handleNuevaUbicacion)
+  stopSignalR()
+})
 </script>
+
 
 <style>
 #app {

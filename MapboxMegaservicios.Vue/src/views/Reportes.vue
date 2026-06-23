@@ -13,8 +13,8 @@
     </v-row>
 
     <!-- Selector de Tipo de Reporte (Tarjetas Grandes) -->
-    <v-row class="mb-4">
-      <v-col cols="12" sm="6" md="3" v-for="opcion in opcionesReportes" :key="opcion.value">
+    <v-row class="mb-4 justify-center">
+      <v-col cols="12" sm="4" md="4" v-for="opcion in opcionesReportes" :key="opcion.value">
         <v-card 
           @click="tipoReporte = opcion.value"
           :class="{ 'card-active': tipoReporte === opcion.value }"
@@ -110,7 +110,7 @@
                 :items="empleados" 
                 item-title="nombreCompleto" 
                 item-value="id" 
-                label="Seleccionar Empleado (Opcional)"
+                :label="tipoReporte === 'individual' ? 'Seleccionar Empleado (Requerido)' : 'Seleccionar Empleado (Opcional)'"
                 variant="solo-filled"
                 flat
                 bg-color="rgba(255,255,255,0.05)"
@@ -200,12 +200,11 @@ const empleados = ref<any[]>([])
 const opcionesReportes = [
   { value: 'general', title: 'Global', desc: 'Resumen general de asistencia y alertas.', icon: 'mdi-web' },
   { value: 'individual', title: 'Individual', desc: 'Detalle específico por empleado.', icon: 'mdi-account-details' },
-  { value: 'descuentos', title: 'Descuentos', desc: 'Cálculo de penalizaciones salariales.', icon: 'mdi-cash-remove' },
   { value: 'improductividad', title: 'RF-05', desc: 'Consolidado Inasistencias/Improductividad.', icon: 'mdi-file-document-alert' }
 ]
 
-const mostrarFiltroEmpleado = computed(() => ['individual', 'descuentos', 'improductividad'].includes(tipoReporte.value))
-const mostrarFiltroLugar = computed(() => ['general', 'descuentos', 'improductividad'].includes(tipoReporte.value))
+const mostrarFiltroEmpleado = computed(() => ['individual', 'improductividad'].includes(tipoReporte.value))
+const mostrarFiltroLugar = computed(() => ['general', 'improductividad'].includes(tipoReporte.value))
 
 async function generarReporte() {
   cargando.value = true

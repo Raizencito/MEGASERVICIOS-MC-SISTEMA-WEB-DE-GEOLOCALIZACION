@@ -98,15 +98,15 @@
     <v-row>
       <!-- Gráfico -->
       <v-col cols="12" md="4">
-        <v-card elevation="2" rounded="xl" class="h-100 d-flex flex-column">
-          <v-card-title class="pa-6 pb-2 text-h6 font-weight-bold">
+        <v-card elevation="2" rounded="xl" class="h-100 d-flex flex-column" style="max-height: 450px;">
+          <v-card-title class="pa-6 pb-2 text-h6 font-weight-bold flex-shrink-0">
             Distribución de Personal
           </v-card-title>
-          <v-card-text class="pa-6 pt-0 flex-grow-1 position-relative">
-            <div v-if="loading" class="text-center w-100 h-100 d-flex justify-center align-center">
+          <v-card-text class="pa-6 pt-0 flex-grow-1 position-relative d-flex flex-column justify-center">
+            <div v-if="loading" class="text-center w-100 d-flex justify-center align-center h-100">
               <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
             </div>
-            <div v-else-if="chartData" class="w-100 d-flex justify-center" style="position: relative; height: 300px; max-height: 300px;">
+            <div v-else-if="chartData" class="w-100 d-flex justify-center align-center h-100" style="position: relative; min-height: 250px;">
               <Doughnut :data="chartData" :options="chartOptions" />
             </div>
             <div v-else class="text-medium-emphasis text-center w-100 h-100 d-flex justify-center align-center">Sin datos para mostrar</div>
@@ -116,12 +116,12 @@
 
       <!-- Últimas Alertas -->
       <v-col cols="12" md="8">
-        <v-card elevation="2" rounded="xl" class="h-100">
-          <v-card-title class="pa-6 pb-2 text-h6 font-weight-bold d-flex justify-space-between align-center">
+        <v-card elevation="2" rounded="xl" class="h-100 d-flex flex-column" style="max-height: 450px;">
+          <v-card-title class="pa-6 pb-2 text-h6 font-weight-bold d-flex justify-space-between align-center flex-shrink-0">
             <span>Últimas Alertas</span>
             <v-chip color="primary" variant="flat" size="small">{{ alertas.length }} eventos</v-chip>
           </v-card-title>
-          <v-card-text class="pa-0">
+          <v-card-text class="pa-0 flex-grow-1 overflow-y-auto" style="scrollbar-width: thin;">
             <div v-if="loading" class="pa-6 text-center">
               <v-progress-circular indeterminate color="primary"></v-progress-circular>
             </div>

@@ -1,8 +1,10 @@
 using MapboxMegaservicios.API.Data;
 using MapboxMegaservicios.API.DTOs;
+using MapboxMegaservicios.API.Hubs;
 using MapboxMegaservicios.API.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
 using System.Security.Claims;
@@ -15,11 +17,16 @@ namespace MapboxMegaservicios.API.Controllers
     {
         private readonly ApplicationDbContext _context;
         private readonly ILogger<UbicacionesController> _logger;
+        private readonly IHubContext<UbicacionHub> _hubContext;
 
-        public UbicacionesController(ApplicationDbContext context, ILogger<UbicacionesController> logger)
+        public UbicacionesController(
+            ApplicationDbContext context,
+            ILogger<UbicacionesController> logger,
+            IHubContext<UbicacionHub> hubContext)
         {
             _context = context;
             _logger = logger;
+            _hubContext = hubContext;
         }
 
         [HttpPost("registrar")]
@@ -110,7 +117,7 @@ namespace MapboxMegaservicios.API.Controllers
                 _logger.LogInformation("📍 Ubicación registrada - Empleado: {Nombre} ({Id}), Estado: {Estado}, Spoofing: {Spoofing}",
                     nombreEmpleado, empleadoId, estaEnGeocerca ? "DENTRO" : "FUERA", isPossibleSpoofing);
 
-                return Ok(new UbicacionDTO
+                var resultDto = new UbicacionDTO
                 {
                     EmpleadoId = empleadoId,
                     EmpleadoNombre = nombreEmpleado,
@@ -121,7 +128,12 @@ namespace MapboxMegaservicios.API.Controllers
                     Estado = estaEnGeocerca ? "Dentro de geocerca" : "Fuera de geocerca",
                     LugarTrabajo = lugarTrabajo ?? "Sin asignar",
                     IsPossibleSpoofing = isPossibleSpoofing
-                });
+                };
+
+                // Emitir a todos los clientes SignalR conectados
+                await _hubContext.Clients.All.SendAsync("NuevaUbicacion", resultDto);
+
+                return Ok(resultDto);
             }
             catch (Exception ex)
             {
@@ -388,7 +400,7 @@ namespace MapboxMegaservicios.API.Controllers
                 _logger.LogInformation("🎮 Simulación registrada - Empleado: {Nombre} ({Id}), Estado: {Estado}",
                     nombreEmpleado, request.EmpleadoId, estaEnGeocerca ? "DENTRO" : "FUERA");
 
-                return Ok(new UbicacionDTO
+                var resultDto = new UbicacionDTO
                 {
                     EmpleadoId = request.EmpleadoId,
                     EmpleadoNombre = nombreEmpleado,
@@ -399,7 +411,12 @@ namespace MapboxMegaservicios.API.Controllers
                     Estado = estaEnGeocerca ? "Dentro de geocerca" : "Fuera de geocerca",
                     LugarTrabajo = empleado.LugarTrabajoActual?.Nombre ?? "Sin asignar",
                     IsPossibleSpoofing = false
-                });
+                };
+
+                // Emitir a todos los clientes SignalR conectados
+                await _hubContext.Clients.All.SendAsync("NuevaUbicacion", resultDto);
+
+                return Ok(resultDto);
             }
             catch (Exception ex)
             {
