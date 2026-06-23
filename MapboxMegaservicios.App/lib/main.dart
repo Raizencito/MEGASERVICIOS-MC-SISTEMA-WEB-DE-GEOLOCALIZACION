@@ -3,8 +3,6 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'providers/auth_provider.dart';
-import 'providers/empleados_provider.dart';
-import 'providers/ubicaciones_provider.dart';
 import 'providers/asistencia_provider.dart';
 import 'services/bg_location_service.dart';
 import 'theme.dart';
@@ -25,8 +23,6 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
-        ChangeNotifierProvider(create: (_) => EmpleadosProvider()),
-        ChangeNotifierProvider(create: (_) => UbicacionesProvider()),
         ChangeNotifierProvider(create: (_) => AsistenciaProvider()),
       ],
       child: const SGEMobileApp(),
